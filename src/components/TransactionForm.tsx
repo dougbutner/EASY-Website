@@ -10,8 +10,16 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Send, CheckCircle, AlertCircle } from 'lucide-react';
 
+type TransactionResult = {
+  processed?: {
+    id?: string;
+  };
+};
+
 interface TransactionFormProps {
-  onTransact: (actions: Array<{ account: string; name: string; data: Record<string, any> }>) => Promise<any>;
+  onTransact: (
+    actions: Array<{ account: string; name: string; data: Record<string, unknown> }>
+  ) => Promise<TransactionResult>;
   isLoggedIn: boolean;
 }
 
@@ -27,7 +35,7 @@ export function TransactionForm({ onTransact, isLoggedIn }: TransactionFormProps
     setResult(null);
 
     // Validate JSON data
-    let parsedData: Record<string, any>;
+    let parsedData: Record<string, unknown>;
     try {
       parsedData = JSON.parse(data);
     } catch {
@@ -49,10 +57,10 @@ export function TransactionForm({ onTransact, isLoggedIn }: TransactionFormProps
         success: true,
         message: `Transaction successful! ID: ${txResult?.processed?.id?.slice(0, 12) ?? 'OK'}…`,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setResult({
         success: false,
-        message: err?.message || 'Transaction failed.',
+        message: err instanceof Error ? err.message : 'Transaction failed.',
       });
     } finally {
       setSubmitting(false);
