@@ -161,9 +161,9 @@ const featureCards = [
   },
 ];
 
-/** Proton (XPR) chain — Alcor embeds use proton.alcor.exchange; /v/xpr/ URLs often ignore widget params and fall back to XPR/XMD. */
+/** Swap UI (`/swap`, `/swap-widget`) uses proton.alcor.exchange for reliable token loading; other Alcor links/embeds use `alcor.exchange/v/xpr/...`. */
 const alcorEasySwap = 'https://proton.alcor.exchange/swap?input=XUSDC-xtokens&output=EASY-mon3y';
-const alcorEasySpotTrade = 'https://proton.alcor.exchange/trade/easy-mon3y_xusdc-xtokens';
+const alcorEasySpotTrade = 'https://alcor.exchange/v/xpr/trade/easy-mon3y_xusdc-xtokens';
 const alcorEasySwapWidget = 'https://proton.alcor.exchange/swap-widget?input=XUSDC-xtokens&output=EASY-mon3y';
 
 function tokenLogoUrl(token: TokenConfig, wonRandom: string): string {
