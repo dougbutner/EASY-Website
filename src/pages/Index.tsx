@@ -15,7 +15,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { pickRandomWonVariant, TOKEN_LOGO } from '@/constants/tokenAssets';
 import { useProton } from '@/hooks/useProton';
 import { cn } from '@/lib/utils';
@@ -25,6 +24,7 @@ import {
   flexPoolRewardSymbol,
   type FlexPoolRow,
 } from '@/services/flexPools';
+import { fetchFlexersBalance } from '@/services/flexFlexerBalance';
 import {
   EASY_BRIDGE_CONTRACT,
   EASY_BRIDGE_WALLET,
@@ -40,15 +40,42 @@ import { signUnbroadcastWebAuthTransaction } from '@/services/walletSessions';
 import {
   ExternalLink,
   Globe2,
-  HelpCircle,
   Network,
   Send,
-  ShieldOff,
   Sparkles,
   Sprout,
   TreePine,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+/** Sonner default is ~4s; keep success toasts at least 6s and 3s longer than that baseline. */
+const BROADCAST_SUCCESS_TOAST_MS = Math.max(6000, 4000 + 3000);
+
+function extractBroadcastTxId(result: unknown): string | null {
+  if (!result || typeof result !== 'object') return null;
+  const o = result as Record<string, unknown>;
+
+  const idFromProcessed = (processed: unknown): string | null => {
+    if (!processed || typeof processed !== 'object') return null;
+    const id = (processed as Record<string, unknown>).id;
+    return typeof id === 'string' && id.trim().length > 0 ? id.trim() : null;
+  };
+
+  const direct = idFromProcessed(o.processed);
+  if (direct) return direct;
+
+  const response = o.response;
+  if (response && typeof response === 'object') {
+    const nested = idFromProcessed((response as Record<string, unknown>).processed);
+    if (nested) return nested;
+  }
+
+  return null;
+}
+
+function xprTransactionExplorerUrl(txId: string) {
+  return `https://explorer.xprnetwork.org/transaction/${encodeURIComponent(txId)}`;
+}
 
 type FlexAction = {
   account: string;
@@ -94,7 +121,7 @@ const tokens: TokenConfig[] = [
   {
     symbol: 'EASY',
     contract: 'mon3y',
-    title: 'Take it EASY',
+    title: 'Take it EASY 🍹',
     tagline: 'The keystone customizable-reflection neo+.',
     summary: 'A fair-launched token backed by ranged liquidity and automatic holder rewards.',
     tax: '2% reflection',
@@ -110,7 +137,7 @@ const tokens: TokenConfig[] = [
   {
     symbol: 'WON',
     contract: 'w3won',
-    title: 'We WON',
+    title: 'We WON ⓦ',
     tagline: 'EASY-backed reflections for ecovillage tokenization.',
     summary: 'WON routes reflections and a project budget toward real-world community work.',
     tax: '2.2% reflection + 0.8% team',
@@ -145,7 +172,7 @@ const tokens: TokenConfig[] = [
   {
     symbol: 'MEME',
     contract: 'm3m3',
-    title: 'GM Degens',
+    title: 'GM Degens 🍦',
     tagline: 'The burn-heavy Flex token for farms, culture, and laughs.',
     summary: 'MEME splits activity between holder reflections and supply burn mechanics.',
     tax: '1% reflection + 1% burn',
@@ -159,6 +186,20 @@ const tokens: TokenConfig[] = [
     optOutAction: 'noflexzone',
   },
 ];
+
+const WON_GRAMS_BENEFICIARY_UI = new Set(['WON', 'GRAMS']);
+
+const DEFAULT_FLEX_BENEFIT_MEMO: Partial<Record<string, string>> = {
+  WON: "Blessings @@. I've passed some of my rewards to you $$ ** I get from WON",
+  GRAMS: "Blessings @@. I've passed some of my rewards to you $$ ** I get from GRAMS",
+};
+
+const FLEX_MEMO_INTRO =
+  'Create a custom memo to activate other contracts, or just say hello.';
+
+/** Rough on-chain guide for ~1 minute of reflection accrual in `flexers` pending (approximate). */
+const FLEX_REFLECTION_MIN_NOTE =
+  'Rough guide for ~1 min of reflection in pending: about 8 WON, 0.1 GRAMS, 1,000 EASY, or 10M MEME (pool + activity dependent).';
 
 const featureCards = [
   {
@@ -214,7 +255,9 @@ const Index = () => {
   const [rewardSymbol, setRewardSymbol] = useState('EASY');
   const [treeAccount, setTreeAccount] = useState('');
   const [treeRate, setTreeRate] = useState('10000');
-  const [customMemo, setCustomMemo] = useState('Thanks @@ for stacking $$ ** with EASY.');
+  const [customMemo, setCustomMemo] = useState(
+    () => DEFAULT_FLEX_BENEFIT_MEMO.WON ?? ''
+  );
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [poolsByContract, setPoolsByContract] = useState<Record<string, FlexPoolRow[]>>({});
   const [selectedPoolRowId, setSelectedPoolRowId] = useState<string | null>(null);
@@ -225,6 +268,9 @@ const Index = () => {
   const [bridgeWithdrawAmount, setBridgeWithdrawAmount] = useState('');
   const [bridgeEasySnap, setBridgeEasySnap] = useState<BridgeEasySnapshot | null>(null);
   const [bridgeBalanceLoading, setBridgeBalanceLoading] = useState(false);
+  const [flexerBalanceBySymbol, setFlexerBalanceBySymbol] = useState<Record<string, string | null>>({});
+  const [flexerBalanceLoading, setFlexerBalanceLoading] = useState(false);
+  const [flexerEpoch, setFlexerEpoch] = useState(0);
   const mainRef = useRef<HTMLElement>(null);
   const [wonLogoUrl] = useState(() => pickRandomWonVariant());
 
@@ -232,6 +278,42 @@ const Index = () => {
     () => tokens.find((token) => token.symbol === selectedSymbol) ?? tokens[0],
     [selectedSymbol]
   );
+
+  const beneficiaryUi = WON_GRAMS_BENEFICIARY_UI.has(selectedToken.symbol);
+
+  useEffect(() => {
+    const next = DEFAULT_FLEX_BENEFIT_MEMO[selectedSymbol];
+    if (next !== undefined) setCustomMemo(next);
+  }, [selectedSymbol]);
+
+  useEffect(() => {
+    if (loading || !actor) {
+      setFlexerBalanceBySymbol({});
+      setFlexerBalanceLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setFlexerBalanceBySymbol({});
+    setFlexerBalanceLoading(true);
+    void (async () => {
+      try {
+        const pairs = await Promise.all(
+          tokens.map(async (t) => {
+            const bal = await fetchFlexersBalance(t.contract, actor);
+            return [t.symbol, bal] as const;
+          })
+        );
+        if (!cancelled) setFlexerBalanceBySymbol(Object.fromEntries(pairs));
+      } catch {
+        if (!cancelled) setFlexerBalanceBySymbol({});
+      } finally {
+        if (!cancelled) setFlexerBalanceLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [actor, loading, flexerEpoch, tokens]);
 
   const poolRows = poolsByContract[selectedToken.contract] ?? [];
   const poolsLoaded = poolRows.length > 0;
@@ -311,8 +393,31 @@ const Index = () => {
 
     setSubmitting(label);
     try {
-      await transact(actions);
-      toast.success(`${label} sent for ${selectedToken.symbol}.`);
+      const result = await transact(actions);
+      const txId = extractBroadcastTxId(result);
+      const message = `${label} sent for ${selectedToken.symbol}.`;
+      const baseOpts = { duration: BROADCAST_SUCCESS_TOAST_MS };
+
+      if (txId) {
+        const href = xprTransactionExplorerUrl(txId);
+        toast.success(message, {
+          ...baseOpts,
+          description: (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 font-medium text-yellow-300 underline decoration-yellow-300/35 underline-offset-2 hover:text-yellow-200"
+            >
+              View transaction on explorer
+              <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+            </a>
+          ),
+        });
+      } else {
+        toast.success(message, baseOpts);
+      }
+      setFlexerEpoch((n) => n + 1);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `${label} failed.`);
     } finally {
@@ -339,7 +444,7 @@ const Index = () => {
     ]);
 
   const optOutOfTax = () =>
-    submitAction('Tax opt-out', [
+    submitAction('Renounce rewards', [
       {
         account: selectedToken.contract,
         name: selectedToken.optOutAction,
@@ -349,7 +454,7 @@ const Index = () => {
 
   const setInheritance = () => {
     if (!selectedToken.treeAction) return;
-    submitAction('Inheritance route', [
+    submitAction('Set inheritance', [
       {
         account: selectedToken.contract,
         name: selectedToken.treeAction,
@@ -364,7 +469,7 @@ const Index = () => {
 
   const setInheritanceMemo = () => {
     if (!selectedToken.memoAction) return;
-    submitAction('Custom memo', [
+    submitAction('Set reward memo', [
       {
         account: selectedToken.contract,
         name: selectedToken.memoAction,
@@ -541,10 +646,22 @@ const Index = () => {
                   {tokens.map((token) => {
                     const selected = token.symbol === selectedSymbol;
                     return (
-                      <div
+                      <button
                         key={token.symbol}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSymbol(token.symbol);
+                          const cached = poolsByContract[token.contract];
+                          if (cached?.length) {
+                            setSelectedPoolRowId(String(cached[0].id));
+                            setRewardSymbol(flexPoolRewardSymbol(cached[0]));
+                          } else {
+                            setSelectedPoolRowId(null);
+                            setRewardSymbol(token.symbol);
+                          }
+                        }}
                         className={cn(
-                          'rounded-[1.35rem] px-4 py-3 text-left transition',
+                          'flex w-full flex-col items-stretch rounded-[1.35rem] px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-300',
                           selected
                             ? 'bg-yellow-300 text-black shadow-[0_0_30px_rgba(250,204,21,0.28)]'
                             : 'bg-yellow-300/5 text-yellow-100 hover:bg-yellow-300/10'
@@ -553,35 +670,26 @@ const Index = () => {
                         <TokenThumb
                           src={tokenLogoUrl(token, wonLogoUrl)}
                           alt={token.symbol}
-                          className="mb-2 h-10 w-10 rounded-lg"
+                          className="h-10 w-10 shrink-0 rounded-lg"
                         />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedSymbol(token.symbol);
-                            const cached = poolsByContract[token.contract];
-                            if (cached?.length) {
-                              setSelectedPoolRowId(String(cached[0].id));
-                              setRewardSymbol(flexPoolRewardSymbol(cached[0]));
-                            } else {
-                              setSelectedPoolRowId(null);
-                              setRewardSymbol(token.symbol);
-                            }
-                          }}
-                          className="block w-full text-left text-xs font-black uppercase tracking-[0.22em]"
-                        >
+                        <span className="mt-3 text-lg font-black uppercase tracking-[0.16em] sm:text-xl">
                           {token.symbol}
-                        </button>
-                        <a
-                          href={token.explorerUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-1 inline-flex items-center gap-1 text-xs opacity-70 underline-offset-2 hover:underline"
+                        </span>
+                        <span
+                          className={cn(
+                            'mt-2 block min-h-[1rem] text-center text-[10px] font-medium leading-tight tracking-tight',
+                            selected ? 'text-black/55' : 'text-yellow-100/45'
+                          )}
                         >
-                          {token.contract}
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      </div>
+                          {!actor
+                            ? `Acquire ${token.symbol}`
+                            : flexerBalanceLoading
+                              ? '…'
+                              : flexerBalanceBySymbol[token.symbol]
+                                ? `Balance ${flexerBalanceBySymbol[token.symbol]}`
+                                : `Acquire ${token.symbol}`}
+                        </span>
+                      </button>
                     );
                   })}
                 </div>
@@ -614,18 +722,41 @@ const Index = () => {
                     <StatLine label="Reward min" value={selectedToken.minHold} />
                     <StatLink label="DEX analytics" href={selectedToken.analyticsUrl} value="Open Alcor" />
                   </div>
-                  <Button
-                    type="button"
-                    onClick={sendRewards}
-                    disabled={!isLoggedIn || submitting !== null}
-                    className="mt-6 w-full bg-yellow-300 text-black hover:bg-yellow-200"
-                  >
-                    <Send className="mr-2 h-4 w-4" />
-                    {submitting === 'Send rewards' ? 'Sending...' : `Send Rewards (${selectedToken.sendAction})`}
-                  </Button>
+                  <div className="mt-8 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={sendRewards}
+                      disabled={!isLoggedIn || submitting !== null}
+                      className={cn(
+                        'inline-flex max-w-lg items-center gap-6 rounded-2xl border border-yellow-300/25 bg-gradient-to-b from-yellow-300/[0.14] via-yellow-300/[0.06] to-black/85 px-8 py-6 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-md transition',
+                        'hover:border-yellow-300/40 hover:from-yellow-300/[0.2] hover:shadow-[0_16px_48px_rgba(250,204,21,0.12)]',
+                        'disabled:pointer-events-none disabled:opacity-40'
+                      )}
+                    >
+                      <TokenThumb
+                        src={tokenLogoUrl(selectedToken, wonLogoUrl)}
+                        alt=""
+                        className="h-20 w-20 shrink-0 rounded-2xl object-cover sm:h-24 sm:w-24"
+                      />
+                      <span className="flex min-w-0 flex-col text-center sm:text-left">
+                        <span className="text-xl font-black uppercase tracking-[0.14em] text-yellow-50 sm:text-2xl">
+                          {submitting === 'Send rewards' ? 'Sending…' : 'Send rewards'}
+                        </span>
+                        <span className="mt-2 flex items-center justify-center gap-2 text-sm text-yellow-100/70 sm:justify-start">
+                          <Send className="h-4 w-4 shrink-0 text-yellow-300/90" />
+                          <span className="font-mono text-xs uppercase tracking-wider text-yellow-100/55">
+                            {selectedToken.sendAction}
+                          </span>
+                        </span>
+                      </span>
+                    </button>
+                  </div>
+                  <p className="mx-auto mt-3 max-w-md px-2 text-center text-[10px] leading-relaxed text-yellow-100/40">
+                    {FLEX_REFLECTION_MIN_NOTE}
+                  </p>
                 </div>
 
-                <div className="space-y-4">
+                <div className="flex flex-col space-y-4">
                   <div className="rounded-[2rem] border border-yellow-300/15 bg-black/50 p-5">
                     <div className="flex items-center gap-3">
                       <TokenThumb
@@ -700,15 +831,15 @@ const Index = () => {
                     </div>
                   </div>
 
-                  {selectedToken.treeAction && selectedToken.memoAction && (
+                  {selectedToken.treeAction && (
                     <div className="rounded-[2rem] border border-yellow-300/15 bg-black/50 p-5">
                       <div className="flex items-center gap-3">
-                        <TreePine className="h-5 w-5 text-yellow-300" />
+                        <TreePine className="h-5 w-5 shrink-0 text-yellow-300" />
                         <div>
-                          <h4 className="font-black text-yellow-50">Inheritance / Tree Routing</h4>
-                          <p className="text-xs text-yellow-100/55">
-                            {selectedToken.treeAction} + {selectedToken.memoAction}
-                          </p>
+                          <h4 className="font-black text-yellow-50">
+                            {beneficiaryUi ? 'Beneficiary' : 'Inheritance'}
+                          </h4>
+                          <p className="text-xs text-yellow-100/55">{selectedToken.treeAction}</p>
                         </div>
                       </div>
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -737,37 +868,41 @@ const Index = () => {
                           />
                         </div>
                       </div>
-                      <div className="mt-3 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor="tree-memo" className="text-yellow-100/80">
-                            Custom memo
-                          </Label>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label="Custom memo shortcode help"
-                                className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-yellow-300/30 text-yellow-200 hover:bg-yellow-300 hover:text-black"
-                              >
-                                <HelpCircle className="h-3.5 w-3.5" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs border-yellow-300/25 bg-black text-yellow-50">
-                              <div className="space-y-1 text-xs">
-                                <p>
-                                  <span className="font-mono text-yellow-300">@@</span> becomes the recipient
-                                  account.
-                                </p>
-                                <p>
-                                  <span className="font-mono text-yellow-300">$$</span> becomes the reward amount.
-                                </p>
-                                <p>
-                                  <span className="font-mono text-yellow-300">**</span> becomes the token symbol.
-                                </p>
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
+                      <Button
+                        type="button"
+                        onClick={setInheritance}
+                        disabled={!isLoggedIn || submitting !== null || !treeAccount.trim()}
+                        className="mt-4 w-full bg-yellow-300 text-black hover:bg-yellow-200"
+                      >
+                        {submitting === 'Set inheritance'
+                          ? 'Submitting…'
+                          : beneficiaryUi
+                            ? 'Submit beneficiary'
+                            : 'Submit inheritance'}
+                      </Button>
+                    </div>
+                  )}
+
+                  {selectedToken.memoAction && (
+                    <div className="rounded-[2rem] border border-yellow-300/15 bg-black/50 p-5">
+                      <div className="flex items-center gap-3">
+                        <Sprout className="h-5 w-5 shrink-0 text-yellow-300" />
+                        <div>
+                          <h4 className="font-black text-yellow-50">
+                            {beneficiaryUi ? 'Custom benefit memo' : 'Reward memo'}
+                          </h4>
+                          <p className="text-xs leading-relaxed text-yellow-100/55">{FLEX_MEMO_INTRO}</p>
                         </div>
+                      </div>
+                      <div className="mt-4 space-y-2">
+                        <Label htmlFor="tree-memo" className="text-yellow-100/80">
+                          Memo template
+                        </Label>
+                        <p className="text-[11px] leading-relaxed text-yellow-100/40">
+                          <span className="font-mono text-yellow-300/80">@@</span> becomes the recipient account.{' '}
+                          <span className="font-mono text-yellow-300/80">$$</span> becomes the reward amount.{' '}
+                          <span className="font-mono text-yellow-300/80">**</span> becomes the token symbol.
+                        </p>
                         <Textarea
                           id="tree-memo"
                           value={customMemo}
@@ -775,38 +910,34 @@ const Index = () => {
                           className="min-h-20 border-yellow-300/20 bg-black/70 text-yellow-50"
                         />
                       </div>
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <Button
-                          type="button"
-                          onClick={setInheritance}
-                          disabled={!isLoggedIn || submitting !== null || !treeAccount.trim()}
-                          className="bg-yellow-300 text-black hover:bg-yellow-200"
-                        >
-                          Set Route
-                        </Button>
-                        <Button
-                          type="button"
-                          onClick={setInheritanceMemo}
-                          disabled={!isLoggedIn || submitting !== null}
-                          variant="outline"
-                          className="border-yellow-300/30 bg-black/50 text-yellow-100 hover:bg-yellow-300 hover:text-black"
-                        >
-                          Set Memo
-                        </Button>
-                      </div>
+                      <Button
+                        type="button"
+                        onClick={setInheritanceMemo}
+                        disabled={!isLoggedIn || submitting !== null}
+                        variant="outline"
+                        className="mt-4 w-full border-yellow-300/30 bg-black/50 text-yellow-100 hover:bg-yellow-300 hover:text-black"
+                      >
+                        {submitting === 'Set reward memo'
+                          ? 'Submitting…'
+                          : beneficiaryUi
+                            ? 'Submit custom benefit memo'
+                            : 'Submit reward memo'}
+                      </Button>
                     </div>
                   )}
 
-                  <Button
-                    type="button"
-                    onClick={optOutOfTax}
-                    disabled={!isLoggedIn || submitting !== null}
-                    variant="outline"
-                    className="w-full border-red-400/30 bg-red-500/10 text-red-100 hover:bg-red-400 hover:text-black"
-                  >
-                    <ShieldOff className="mr-2 h-4 w-4" />
-                    Opt Out of Tax ({selectedToken.optOutAction})
-                  </Button>
+                  <div className="mt-auto flex flex-wrap items-end justify-end gap-x-4 gap-y-1 border-t border-yellow-300/10 pt-4">
+                    <button
+                      type="button"
+                      onClick={optOutOfTax}
+                      disabled={!isLoggedIn || submitting !== null}
+                      className="max-w-md text-right text-[11px] leading-snug text-yellow-100/35 underline-offset-2 transition hover:text-yellow-100/55 hover:underline disabled:pointer-events-none disabled:opacity-30"
+                    >
+                      {submitting === 'Renounce rewards'
+                        ? 'Submitting renounce…'
+                        : `Opt out of tax (${selectedToken.optOutAction}) — renounce rewards forever`}
+                    </button>
+                  </div>
                 </div>
               </div>
             </GlassCard>
@@ -835,7 +966,7 @@ const Index = () => {
                 <TokenThumb src={TOKEN_LOGO.EASY} alt="EASY" className="h-14 w-14 rounded-2xl" />
                 <Sparkles className="h-10 w-10 shrink-0 text-yellow-300" />
               </div>
-              <h3 className="mt-8 text-4xl font-black text-yellow-50">Take it EASY.</h3>
+              <h3 className="mt-8 text-4xl font-black text-yellow-50">Take it EASY 🍹.</h3>
               <p className="mt-4 text-yellow-100/65">
                 The page is intentionally one move at a time: connect, choose the token, make the call, or jump
                 into the live Alcor market.

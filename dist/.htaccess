@@ -1,0 +1,24 @@
+# Copied to dist/ by Vite. Requires mod_rewrite, mod_proxy, mod_proxy_http (and SSLProxyEngine for HTTPS upstream).
+
+<IfModule mod_ssl.c>
+  SSLProxyEngine on
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Storex Fireblocks API — same-origin /api/storex → https://api.storex.io/...
+  # (api.storex.io CORS does not allow flex.town; the SPA uses this proxy path.)
+  # Must run BEFORE any rule that rewrites unknown paths into /dist/.
+  RewriteRule ^api/storex/(.*)$ https://api.storex.io/$1 [P,L]
+
+  # Static site: built app lives under /dist (Vite output)
+  RewriteCond %{REQUEST_URI} !^/dist/
+  RewriteCond %{REQUEST_URI} !^/api/storex/
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^(.*)$ dist/$1 [L]
+
+  RewriteRule ^$ dist/ [L]
+</IfModule>
