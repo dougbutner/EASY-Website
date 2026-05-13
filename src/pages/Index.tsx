@@ -707,22 +707,33 @@ const Index = () => {
         </SnapSection>
 
         <SnapSection id="price" eyebrow="EASY Price Graph" title="Live Alcor market view.">
-          <div className="w-full max-w-6xl overflow-hidden rounded-[2rem] border border-yellow-300/20 bg-black/70 shadow-[0_0_70px_rgba(234,179,8,0.12)]">
-            <iframe
-              title="EASY price graph on Alcor"
-              src={alcorEasyChart}
-              className="h-[68vh] w-full bg-black"
-              loading="lazy"
-            />
+          <div className="flex w-full max-w-6xl flex-col gap-5">
+            <p className="text-base leading-relaxed text-yellow-100/70">
+              Open full analytics for{' '}
+              {tokens.map((token, i) => (
+                <span key={token.symbol}>
+                  {i > 0 ? ' ' : null}
+                  <a
+                    href={token.analyticsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold text-yellow-300 underline-offset-2 hover:text-yellow-100 hover:underline"
+                  >
+                    {token.symbol}
+                  </a>
+                </span>
+              ))}
+              .
+            </p>
+            <div className="overflow-hidden rounded-[2rem] border border-yellow-300/20 bg-black/70 shadow-[0_0_70px_rgba(234,179,8,0.12)]">
+              <iframe
+                title="EASY price graph on Alcor"
+                src={alcorEasyChart}
+                className="h-[68vh] w-full bg-black"
+                loading="lazy"
+              />
+            </div>
           </div>
-          <a
-            href="https://alcor.exchange/v/xpr/analytics/tokens/easy-mon3y"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 text-sm font-bold uppercase tracking-[0.2em] text-yellow-300 hover:text-yellow-100"
-          >
-            Open full analytics
-          </a>
         </SnapSection>
 
         <SnapSection id="swap" eyebrow="Swap for EASY" title="Trade without leaving the page.">
@@ -796,10 +807,19 @@ const Index = () => {
                 <p className="mt-3 text-lg font-bold text-yellow-200">{token.tagline}</p>
                 <p className="mt-4 flex-1 leading-7 text-yellow-100/60">{token.summary}</p>
                 <a
+                  href={token.analyticsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.14em] text-yellow-300 underline-offset-2 hover:text-yellow-100 hover:underline"
+                >
+                  Alcor analytics
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                </a>
+                <a
                   href={`https://alcor.exchange/v/xpr/swap?input=XUSDC-xtokens&output=${token.dexToken}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-6 inline-flex items-center justify-center rounded-full border border-yellow-300/25 px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-yellow-200 hover:bg-yellow-300 hover:text-black"
+                  className="mt-3 inline-flex items-center justify-center rounded-full border border-yellow-300/25 px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-yellow-200 hover:bg-yellow-300 hover:text-black"
                 >
                   Swap {token.symbol}
                 </a>
