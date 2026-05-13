@@ -71,7 +71,7 @@ It is a **template**, not a finished product: you add screens, business logic, a
 ## Getting started
 
 ```bash
-# Install (npm, pnpm, or bun — as you prefer)
+# Install (npm; commit package-lock.json — Cloudflare Pages follows the lockfile present in the repo)
 npm install
 
 # Dev server

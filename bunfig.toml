@@ -1,3 +1,0 @@
-[install]
-# Text lockfile for CI (e.g. Cloudflare Pages frozen install) and readable diffs.
-saveTextLockfile = true

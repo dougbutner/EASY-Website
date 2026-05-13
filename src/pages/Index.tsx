@@ -67,7 +67,7 @@ const navItems = [
   { id: 'tools', label: 'Tools' },
   { id: 'what', label: 'What Is EASY' },
   { id: 'money', label: 'Mon3y' },
-  { id: 'price', label: 'Price' },
+  { id: 'price', label: 'Trade' },
   { id: 'swap', label: 'Swap' },
   { id: 'works', label: 'How It Works' },
   { id: 'tokens', label: 'Flex Tokens' },
@@ -161,9 +161,10 @@ const featureCards = [
   },
 ];
 
-const alcorEasySwap = 'https://alcor.exchange/v/xpr/swap?input=XUSDC-xtokens&output=EASY-mon3y';
-const alcorEasyChart = 'https://alcor.exchange/v/xpr/chart-widget?input=XUSDC-xtokens&output=EASY-mon3y';
-const alcorEasySwapWidget = 'https://alcor.exchange/v/xpr/swap-widget?input=XUSDC-xtokens&output=EASY-mon3y';
+/** Proton (XPR) chain — Alcor embeds use proton.alcor.exchange; /v/xpr/ URLs often ignore widget params and fall back to XPR/XMD. */
+const alcorEasySwap = 'https://proton.alcor.exchange/swap?input=XUSDC-xtokens&output=EASY-mon3y';
+const alcorEasySpotTrade = 'https://proton.alcor.exchange/trade/easy-mon3y_xusdc-xtokens';
+const alcorEasySwapWidget = 'https://proton.alcor.exchange/swap-widget?input=XUSDC-xtokens&output=EASY-mon3y';
 
 function tokenLogoUrl(token: TokenConfig, wonRandom: string): string {
   if (token.symbol === 'WON') return wonRandom;
@@ -706,10 +707,10 @@ const Index = () => {
           </div>
         </SnapSection>
 
-        <SnapSection id="price" eyebrow="EASY Price Graph" title="Live Alcor market view.">
+        <SnapSection id="price" eyebrow="EASY / XUSDC" title="Trade on Alcor">
           <div className="flex w-full max-w-6xl flex-col gap-5">
             <p className="text-base leading-relaxed text-yellow-100/70">
-              Open full analytics for{' '}
+              Live EASY/XUSDC spot order book on Alcor. Open token analytics for{' '}
               {tokens.map((token, i) => (
                 <span key={token.symbol}>
                   {i > 0 ? ' ' : null}
@@ -727,8 +728,8 @@ const Index = () => {
             </p>
             <div className="overflow-hidden rounded-[2rem] border border-yellow-300/20 bg-black/70 shadow-[0_0_70px_rgba(234,179,8,0.12)]">
               <iframe
-                title="EASY price graph on Alcor"
-                src={alcorEasyChart}
+                title="EASY XUSDC spot market on Alcor"
+                src={alcorEasySpotTrade}
                 className="h-[68vh] w-full bg-black"
                 loading="lazy"
               />
@@ -816,7 +817,7 @@ const Index = () => {
                   <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-80" />
                 </a>
                 <a
-                  href={`https://alcor.exchange/v/xpr/swap?input=XUSDC-xtokens&output=${token.dexToken}`}
+                  href={`https://proton.alcor.exchange/swap?input=XUSDC-xtokens&output=${token.dexToken}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-3 inline-flex items-center justify-center rounded-full border border-yellow-300/25 px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-yellow-200 hover:bg-yellow-300 hover:text-black"
@@ -826,10 +827,13 @@ const Index = () => {
               </GlassCard>
             ))}
           </div>
-          <footer className="mt-8 text-center text-sm text-yellow-100/45">
-            Built on XPR Network. Token mechanics can change; verify contract actions before high-value calls.
-          </footer>
         </SnapSection>
+
+        <div className="snap-start border-t border-yellow-300/15 bg-black/90 px-4 py-12 sm:px-6 lg:px-8">
+          <p className="mx-auto max-w-2xl text-center text-sm leading-relaxed text-yellow-100/45">
+            Built on XPR Network. Token mechanics can change; verify contract actions before high-value calls.
+          </p>
+        </div>
       </main>
     </div>
   );

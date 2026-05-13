@@ -11,9 +11,6 @@ node_modules
 dist
 dist-ssr
 
-# Use text bun.lock only (see bunfig.toml); ignore binary lockfile.
-bun.lockb
-
 *.local
 
 # Editor directories and files
