@@ -6,24 +6,34 @@ import { Header } from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { pickRandomWonVariant, TOKEN_LOGO } from '@/constants/tokenAssets';
 import { useProton } from '@/hooks/useProton';
 import { cn } from '@/lib/utils';
 import {
-  ArrowRightLeft,
-  BadgeDollarSign,
-  Coins,
-  Flame,
-  Gift,
+  fetchFlexPools,
+  flexPoolLabel,
+  flexPoolRewardSymbol,
+  type FlexPoolRow,
+} from '@/services/flexPools';
+import {
+  ExternalLink,
   Globe2,
-  LineChart,
+  HelpCircle,
   Network,
   Send,
   ShieldOff,
   Sparkles,
   Sprout,
   TreePine,
-  WalletCards,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -42,11 +52,15 @@ type TokenConfig = {
   tax: string;
   minHold: string;
   dexToken: string;
+  analyticsUrl: string;
+  explorerUrl: string;
   sendAction: string;
   rewardAction: string;
   optOutAction: string;
   treeAction?: string;
   memoAction?: string;
+  /** Public URL under `/assets/tokens/`. Omit for WON — a random variant is picked once per page load. */
+  logoPath?: string;
 };
 
 const navItems = [
@@ -69,6 +83,9 @@ const tokens: TokenConfig[] = [
     tax: '2% reflection',
     minHold: '100+ EASY',
     dexToken: 'EASY-mon3y',
+    analyticsUrl: 'https://alcor.exchange/v/xpr/analytics/tokens/easy-mon3y',
+    explorerUrl: 'https://explorer.xprnetwork.org/account/mon3y?loadContract=true&tab=actions&account=mon3y&scope=mon3y&limit=100',
+    logoPath: TOKEN_LOGO.EASY,
     sendAction: 'distribute',
     rewardAction: 'setflextoken',
     optOutAction: 'noflexzone',
@@ -82,6 +99,8 @@ const tokens: TokenConfig[] = [
     tax: '2.2% reflection + 0.8% team',
     minHold: '1+ WON',
     dexToken: 'WON-w3won',
+    analyticsUrl: 'https://alcor.exchange/v/xpr/analytics/tokens/won-w3won',
+    explorerUrl: 'https://explorer.xprnetwork.org/account/w3won?loadContract=true&tab=actions&account=w3won&scope=w3won&limit=100',
     sendAction: 'radiate',
     rewardAction: 'sprouttoken',
     optOutAction: 'optoutoftax',
@@ -95,8 +114,11 @@ const tokens: TokenConfig[] = [
     tagline: 'A Flex-token family member with inheritance-style routing.',
     summary: 'GRAMS uses its own action names for reward choice, tax opt-out, and inheritance.',
     tax: '1.1% reflection',
-    minHold: 'Confirm on explorer',
+    minHold: '0.1 GRAMS',
     dexToken: 'GRAMS-gold.mon3y',
+    analyticsUrl: 'https://alcor.exchange/v/xpr/analytics/tokens/grams-gold.mon3y',
+    explorerUrl: 'https://explorer.xprnetwork.org/account/gold.mon3y?loadContract=true&tab=actions&account=gold.mon3y&scope=gold.mon3y&limit=100',
+    logoPath: TOKEN_LOGO.GRAMS,
     sendAction: 'reflect',
     rewardAction: 'interestoken',
     optOutAction: 'renounce',
@@ -112,6 +134,9 @@ const tokens: TokenConfig[] = [
     tax: '1% reflection + 1% burn',
     minHold: '1M+ MEME',
     dexToken: 'MEME-m3m3',
+    analyticsUrl: 'https://alcor.exchange/v/xpr/analytics/tokens/meme-m3m3',
+    explorerUrl: 'https://explorer.xprnetwork.org/account/m3m3?loadContract=true&tab=actions&account=m3m3&scope=m3m3&limit=100',
+    logoPath: TOKEN_LOGO.MEME,
     sendAction: 'distribute',
     rewardAction: 'setflextoken',
     optOutAction: 'noflexzone',
@@ -120,17 +145,17 @@ const tokens: TokenConfig[] = [
 
 const featureCards = [
   {
-    icon: Gift,
+    image: TOKEN_LOGO.EASY,
     title: 'Send Rewards',
     body: 'Run the token distribution call and use your CPU to push pending reflections to holders.',
   },
   {
-    icon: ArrowRightLeft,
+    image: TOKEN_LOGO.GRAMS,
     title: 'Change Reward Token',
     body: 'Choose what your reflections buy: EASY, GRAMS, MEME, BTC-style wrapped assets, or the token a pool supports.',
   },
   {
-    icon: ShieldOff,
+    image: TOKEN_LOGO.MEME,
     title: 'Opt Out of Tax',
     body: 'Call the token-specific opt-out action when an account needs to skip tax and rewards.',
   },
@@ -139,6 +164,11 @@ const featureCards = [
 const alcorEasySwap = 'https://alcor.exchange/v/xpr/swap?input=XUSDC-xtokens&output=EASY-mon3y';
 const alcorEasyChart = 'https://alcor.exchange/v/xpr/chart-widget?input=XUSDC-xtokens&output=EASY-mon3y';
 const alcorEasySwapWidget = 'https://alcor.exchange/v/xpr/swap-widget?input=XUSDC-xtokens&output=EASY-mon3y';
+
+function tokenLogoUrl(token: TokenConfig, wonRandom: string): string {
+  if (token.symbol === 'WON') return wonRandom;
+  return token.logoPath ?? TOKEN_LOGO.EASY;
+}
 
 const Index = () => {
   const {
@@ -159,14 +189,40 @@ const Index = () => {
   const [rewardSymbol, setRewardSymbol] = useState('EASY');
   const [treeAccount, setTreeAccount] = useState('');
   const [treeRate, setTreeRate] = useState('10000');
-  const [customMemo, setCustomMemo] = useState('Thanks @@ for stacking $$ * with EASY.');
+  const [customMemo, setCustomMemo] = useState('Thanks @@ for stacking $$ ** with EASY.');
   const [submitting, setSubmitting] = useState<string | null>(null);
+  const [poolsByContract, setPoolsByContract] = useState<Record<string, FlexPoolRow[]>>({});
+  const [selectedPoolRowId, setSelectedPoolRowId] = useState<string | null>(null);
+  const [loadingPools, setLoadingPools] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
+  const [wonLogoUrl] = useState(() => pickRandomWonVariant());
 
   const selectedToken = useMemo(
     () => tokens.find((token) => token.symbol === selectedSymbol) ?? tokens[0],
     [selectedSymbol]
   );
+
+  const poolRows = poolsByContract[selectedToken.contract] ?? [];
+  const poolsLoaded = poolRows.length > 0;
+
+  const loadFlexPools = async () => {
+    setLoadingPools(true);
+    try {
+      const rows = await fetchFlexPools(selectedToken.contract);
+      if (!rows.length) {
+        toast.error('No flex pools returned for this contract.');
+        return;
+      }
+      setPoolsByContract((prev) => ({ ...prev, [selectedToken.contract]: rows }));
+      const first = rows[0]!;
+      setSelectedPoolRowId(String(first.id));
+      setRewardSymbol(flexPoolRewardSymbol(first));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load flex pools.');
+    } finally {
+      setLoadingPools(false);
+    }
+  };
 
   useEffect(() => {
     const root = mainRef.current;
@@ -286,17 +342,17 @@ const Index = () => {
         ref={mainRef}
         className="h-screen overflow-y-auto scroll-smooth snap-y snap-mandatory bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,0.2),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(234,179,8,0.12),transparent_32%),#020202]"
       >
-        <SnapSection id="tools" eyebrow="EASY Tools" title="Flex the money machine from one clean panel.">
+        <SnapSection id="tools" eyebrow="EASY Tools" title="New earth finance for the EASY life.">
           <div className="grid w-full max-w-7xl gap-6 lg:grid-cols-[0.9fr_1.1fr]">
             <div className="space-y-5">
               <p className="max-w-xl text-lg text-yellow-100/70">
-                Send rewards, change your reward token, or opt out of tax. Pick a Flex token and the panel only
-                shows calls that exist on that token contract.
+                Send rewards, change your reward token, or opt out of tax (warning, permanant). Pick a Flex token
+                and take control.
               </p>
               <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
                 {featureCards.map((feature) => (
                   <GlassCard key={feature.title}>
-                    <feature.icon className="h-6 w-6 text-yellow-300" />
+                    <TokenThumb src={feature.image} alt="" className="h-11 w-11 rounded-xl" />
                     <h3 className="mt-4 text-xl font-black text-yellow-100">{feature.title}</h3>
                     <p className="mt-2 text-sm leading-6 text-yellow-100/60">{feature.body}</p>
                   </GlassCard>
@@ -307,41 +363,81 @@ const Index = () => {
             <GlassCard className="p-4 sm:p-6">
               <div className="rounded-[2rem] border border-yellow-300/15 bg-black/60 p-2">
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {tokens.map((token) => (
-                    <button
-                      key={token.symbol}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSymbol(token.symbol);
-                        setRewardSymbol(token.symbol);
-                      }}
-                      className={cn(
-                        'rounded-[1.35rem] px-4 py-3 text-left transition',
-                        token.symbol === selectedSymbol
-                          ? 'bg-yellow-300 text-black shadow-[0_0_30px_rgba(250,204,21,0.28)]'
-                          : 'bg-yellow-300/5 text-yellow-100 hover:bg-yellow-300/10'
-                      )}
-                    >
-                      <span className="block text-xs font-black uppercase tracking-[0.22em]">
-                        {token.symbol}
-                      </span>
-                      <span className="mt-1 block text-xs opacity-70">{token.contract}</span>
-                    </button>
-                  ))}
+                  {tokens.map((token) => {
+                    const selected = token.symbol === selectedSymbol;
+                    return (
+                      <div
+                        key={token.symbol}
+                        className={cn(
+                          'rounded-[1.35rem] px-4 py-3 text-left transition',
+                          selected
+                            ? 'bg-yellow-300 text-black shadow-[0_0_30px_rgba(250,204,21,0.28)]'
+                            : 'bg-yellow-300/5 text-yellow-100 hover:bg-yellow-300/10'
+                        )}
+                      >
+                        <TokenThumb
+                          src={tokenLogoUrl(token, wonLogoUrl)}
+                          alt={token.symbol}
+                          className="mb-2 h-10 w-10 rounded-lg"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedSymbol(token.symbol);
+                            const cached = poolsByContract[token.contract];
+                            if (cached?.length) {
+                              setSelectedPoolRowId(String(cached[0].id));
+                              setRewardSymbol(flexPoolRewardSymbol(cached[0]));
+                            } else {
+                              setSelectedPoolRowId(null);
+                              setRewardSymbol(token.symbol);
+                            }
+                          }}
+                          className="block w-full text-left text-xs font-black uppercase tracking-[0.22em]"
+                        >
+                          {token.symbol}
+                        </button>
+                        <a
+                          href={token.explorerUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-xs opacity-70 underline-offset-2 hover:underline"
+                        >
+                          {token.contract}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="mt-6 grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
                 <div className="rounded-[2rem] border border-yellow-300/15 bg-yellow-300/[0.04] p-5">
-                  <p className="text-sm font-bold uppercase tracking-[0.22em] text-yellow-300">
+                  <div className="flex flex-wrap items-start gap-4">
+                    <TokenThumb
+                      src={tokenLogoUrl(selectedToken, wonLogoUrl)}
+                      alt={selectedToken.symbol}
+                      className="h-16 w-16 rounded-2xl sm:h-20 sm:w-20"
+                    />
+                    <div className="min-w-0 flex-1">
+                  <a
+                    href={selectedToken.explorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.22em] text-yellow-300 underline-offset-4 hover:underline"
+                  >
                     {selectedToken.contract}
-                  </p>
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
                   <h3 className="mt-3 text-3xl font-black text-yellow-50">{selectedToken.title}</h3>
+                    </div>
+                  </div>
                   <p className="mt-3 text-sm leading-6 text-yellow-100/65">{selectedToken.summary}</p>
                   <div className="mt-5 grid gap-3 text-sm">
                     <StatLine label="Tax" value={selectedToken.tax} />
                     <StatLine label="Reward min" value={selectedToken.minHold} />
-                    <StatLine label="DEX token" value={selectedToken.dexToken} />
+                    <StatLink label="DEX analytics" href={selectedToken.analyticsUrl} value="Open Alcor" />
                   </div>
                   <Button
                     type="button"
@@ -357,7 +453,11 @@ const Index = () => {
                 <div className="space-y-4">
                   <div className="rounded-[2rem] border border-yellow-300/15 bg-black/50 p-5">
                     <div className="flex items-center gap-3">
-                      <ArrowRightLeft className="h-5 w-5 text-yellow-300" />
+                      <TokenThumb
+                        src={tokenLogoUrl(selectedToken, wonLogoUrl)}
+                        alt=""
+                        className="h-10 w-10 rounded-lg"
+                      />
                       <div>
                         <h4 className="font-black text-yellow-50">Change Reward Token</h4>
                         <p className="text-xs text-yellow-100/55">{selectedToken.rewardAction}</p>
@@ -365,24 +465,62 @@ const Index = () => {
                     </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
                       <div className="space-y-2">
-                        <Label htmlFor="reward-token" className="text-yellow-100/80">
-                          Reward symbol
+                        <Label htmlFor="reward-pool" className="text-yellow-100/80">
+                          Reward pool
                         </Label>
-                        <Input
-                          id="reward-token"
-                          value={rewardSymbol}
-                          onChange={(event) => setRewardSymbol(event.target.value)}
-                          placeholder="EASY"
-                          className="border-yellow-300/20 bg-black/70 text-yellow-50"
-                        />
+                        {poolsLoaded ? (
+                          <Select
+                            value={selectedPoolRowId ?? undefined}
+                            onValueChange={(id) => {
+                              setSelectedPoolRowId(id);
+                              const row = poolRows.find((r) => String(r.id) === id);
+                              if (row) setRewardSymbol(flexPoolRewardSymbol(row));
+                            }}
+                          >
+                            <SelectTrigger
+                              id="reward-pool"
+                              className="border-yellow-300/20 bg-black/70 text-yellow-50 focus:ring-yellow-300/30"
+                            >
+                              <SelectValue placeholder="Select pool" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-72 border-yellow-300/20 bg-zinc-950 text-yellow-50">
+                              {poolRows.map((row) => (
+                                <SelectItem
+                                  key={row.id}
+                                  value={String(row.id)}
+                                  className="focus:bg-yellow-300/15 focus:text-yellow-50"
+                                >
+                                  {flexPoolLabel(row)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <p className="rounded-md border border-yellow-300/15 bg-black/50 px-3 py-2 text-sm text-yellow-100/55">
+                            Tap &quot;Load available&quot; to fetch on-chain flex pools for {selectedToken.contract},
+                            then choose a reward route.
+                          </p>
+                        )}
                       </div>
                       <Button
                         type="button"
-                        onClick={changeRewardToken}
-                        disabled={!isLoggedIn || submitting !== null}
+                        onClick={() => {
+                          if (poolsLoaded) void changeRewardToken();
+                          else void loadFlexPools();
+                        }}
+                        disabled={
+                          !isLoggedIn ||
+                          submitting !== null ||
+                          loadingPools ||
+                          (poolsLoaded && !selectedPoolRowId)
+                        }
                         className="self-end bg-yellow-300 text-black hover:bg-yellow-200"
                       >
-                        Update
+                        {loadingPools
+                          ? 'Loading...'
+                          : poolsLoaded
+                            ? 'Update'
+                            : 'Load available'}
                       </Button>
                     </div>
                   </div>
@@ -425,9 +563,36 @@ const Index = () => {
                         </div>
                       </div>
                       <div className="mt-3 space-y-2">
-                        <Label htmlFor="tree-memo" className="text-yellow-100/80">
-                          Custom memo
-                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="tree-memo" className="text-yellow-100/80">
+                            Custom memo
+                          </Label>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                aria-label="Custom memo shortcode help"
+                                className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-yellow-300/30 text-yellow-200 hover:bg-yellow-300 hover:text-black"
+                              >
+                                <HelpCircle className="h-3.5 w-3.5" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs border-yellow-300/25 bg-black text-yellow-50">
+                              <div className="space-y-1 text-xs">
+                                <p>
+                                  <span className="font-mono text-yellow-300">@@</span> becomes the recipient
+                                  account.
+                                </p>
+                                <p>
+                                  <span className="font-mono text-yellow-300">$$</span> becomes the reward amount.
+                                </p>
+                                <p>
+                                  <span className="font-mono text-yellow-300">**</span> becomes the token symbol.
+                                </p>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                         <Textarea
                           id="tree-memo"
                           value={customMemo}
@@ -492,7 +657,10 @@ const Index = () => {
             </div>
             <GlassCard className="relative overflow-hidden p-8">
               <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-yellow-300/20 blur-3xl" />
-              <Sparkles className="h-10 w-10 text-yellow-300" />
+              <div className="flex items-center gap-4">
+                <TokenThumb src={TOKEN_LOGO.EASY} alt="EASY" className="h-14 w-14 rounded-2xl" />
+                <Sparkles className="h-10 w-10 shrink-0 text-yellow-300" />
+              </div>
               <h3 className="mt-8 text-4xl font-black text-yellow-50">Take it EASY.</h3>
               <p className="mt-4 text-yellow-100/65">
                 The page is intentionally one move at a time: connect, choose the token, make the call, or jump
@@ -560,7 +728,7 @@ const Index = () => {
         <SnapSection id="swap" eyebrow="Swap for EASY" title="Trade without leaving the page.">
           <div className="grid w-full max-w-7xl items-center gap-8 lg:grid-cols-[0.9fr_1.1fr]">
             <div className="space-y-5">
-              <BadgeDollarSign className="h-12 w-12 text-yellow-300" />
+              <TokenThumb src={TOKEN_LOGO.EASY} alt="EASY" className="h-14 w-14 rounded-2xl" />
               <p className="text-xl leading-9 text-yellow-100/75">
                 The swap widget is preloaded from XUSDC to EASY. Change the input token in Alcor when your wallet
                 holds something else.
@@ -609,10 +777,20 @@ const Index = () => {
             {tokens.map((token) => (
               <GlassCard key={token.symbol} className="flex min-h-80 flex-col p-6">
                 <div className="flex items-center justify-between">
-                  <Coins className="h-8 w-8 text-yellow-300" />
-                  <span className="rounded-full border border-yellow-300/20 px-3 py-1 text-xs font-bold text-yellow-200">
+                  <TokenThumb
+                    src={tokenLogoUrl(token, wonLogoUrl)}
+                    alt={token.symbol}
+                    className="h-12 w-12 rounded-xl"
+                  />
+                  <a
+                    href={token.explorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full border border-yellow-300/20 px-3 py-1 text-xs font-bold text-yellow-200 underline-offset-2 hover:bg-yellow-300 hover:text-black hover:underline"
+                  >
                     {token.contract}
-                  </span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
                 </div>
                 <h3 className="mt-8 text-4xl font-black text-yellow-50">{token.symbol}</h3>
                 <p className="mt-3 text-lg font-bold text-yellow-200">{token.tagline}</p>
@@ -636,6 +814,18 @@ const Index = () => {
     </div>
   );
 };
+
+function TokenThumb({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      className={cn('shrink-0 object-cover', className)}
+    />
+  );
+}
 
 function SnapSection({
   id,
@@ -689,6 +879,23 @@ function StatLine({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-yellow-300/10 bg-black/40 px-4 py-3">
       <span className="text-yellow-100/50">{label}</span>
       <span className="font-bold text-yellow-100">{value}</span>
+    </div>
+  );
+}
+
+function StatLink({ label, value, href }: { label: string; value: string; href: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-yellow-300/10 bg-black/40 px-4 py-3">
+      <span className="text-yellow-100/50">{label}</span>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1 font-bold text-yellow-200 underline-offset-2 hover:text-yellow-50 hover:underline"
+      >
+        {value}
+        <ExternalLink className="h-3.5 w-3.5" />
+      </a>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("home page shows title", async ({ page }) => {
+test("home page shows EASY tools", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /XPR Network multi login template/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /EASY Tools/i })).toBeVisible();
 });

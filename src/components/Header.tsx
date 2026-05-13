@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { TOKEN_LOGO } from '@/constants/tokenAssets';
 import { walletTypeLabel, type LoadedWallet } from '@/services/walletSessions';
 import { Anchor, ChevronDown, Copy, LogIn, Plus, Wallet, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -76,9 +77,14 @@ export function Header({
           onClick={() => onNavigate?.('tools')}
           className="flex shrink-0 items-center gap-3 text-left"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-yellow-400 text-black shadow-[0_0_30px_rgba(250,204,21,0.35)]">
-            <span className="text-lg font-black">E</span>
-          </div>
+          <img
+            src={TOKEN_LOGO.EASY}
+            alt="EASY"
+            width={40}
+            height={40}
+            className="h-10 w-10 shrink-0 rounded-2xl object-cover shadow-[0_0_30px_rgba(250,204,21,0.35)]"
+            decoding="async"
+          />
           <div className="hidden sm:block">
             <h1 className="text-lg font-black uppercase tracking-[0.28em] text-yellow-300">EASY</h1>
             <p className="text-[10px] uppercase tracking-[0.22em] text-yellow-100/50">
