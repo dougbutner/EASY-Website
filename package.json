@@ -12,7 +12,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy": "wrangler pages deploy dist",
+    "deploy": "wrangler pages deploy",
     "test": "vitest run",
     "test:watch": "vitest"
   },
