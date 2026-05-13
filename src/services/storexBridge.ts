@@ -10,8 +10,10 @@ export const EASY_MON3Y_CONTRACT = 'mon3y';
 /**
  * Storex `api.storex.io` CORS only allows `https://storex.io`, so the SPA must use a same-origin proxy:
  * - Local / preview: Vite `server.proxy` and `preview.proxy` (`/api/storex` → api.storex.io).
- * - Cloudflare Pages: `functions/_middleware.ts`.
- * Set `VITE_STOREX_API_BASE` to your own proxy origin if you deploy elsewhere.
+ * - Cloudflare Pages: `functions/_middleware.ts` (deploy from repo root with `wrangler pages deploy`).
+ * - Apache (flex.town, etc.): `public/.htaccess` is copied to `dist/.htaccess` — enable mod_proxy and
+ *   keep the `/api/storex/` proxy rules above any rewrite that sends traffic into `/dist/`.
+ * Set `VITE_STOREX_API_BASE` to your own proxy origin if you host a different edge proxy.
  */
 export function getStorexApiBase(): string {
   const raw = import.meta.env.VITE_STOREX_API_BASE as string | undefined;
