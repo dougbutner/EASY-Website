@@ -225,3 +225,36 @@ export async function transactWithWallet(
   }
   return transactAnchor(wallet.session, actions);
 }
+
+/**
+ * Sign with Proton Web SDK (`@proton/web-sdk` session) and **do not broadcast** — Storex receives the signed
+ * payload via `/V1/fireblocks/withdraw` (same flow as Storex’s WebAuth + `broadcast: false` example).
+ */
+export async function signUnbroadcastWebAuthTransaction(
+  wallet: LoadedWallet,
+  actions: Array<{
+    account: string;
+    name: string;
+    data: Record<string, unknown>;
+    authorization?: Array<{ actor: string; permission: string }>;
+  }>
+): Promise<Record<string, unknown>> {
+  if (wallet.provider !== 'webauth') {
+    throw new Error('Storex bridge withdrawals require an active WebAuth wallet.');
+  }
+
+  const filledActions = actions.map((action) => ({
+    ...action,
+    authorization: action.authorization || [
+      {
+        actor: wallet.auth.actor,
+        permission: wallet.auth.permission,
+      },
+    ],
+  }));
+
+  return (await wallet.session.transact(
+    { actions: filledActions },
+    { broadcast: false }
+  )) as Record<string, unknown>;
+}

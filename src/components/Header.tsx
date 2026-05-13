@@ -88,7 +88,7 @@ export function Header({
           <div className="hidden sm:block">
             <h1 className="text-lg font-black uppercase tracking-[0.28em] text-yellow-300">EASY</h1>
             <p className="text-[10px] uppercase tracking-[0.22em] text-yellow-100/50">
-              New Earth Mon3y
+              New Earth Finance
             </p>
           </div>
         </button>

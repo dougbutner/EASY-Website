@@ -40,6 +40,17 @@ export function useProton() {
     };
   }, []);
 
+  /** If localStorage active id is stale (session not restored), fall back to first connected wallet. */
+  useEffect(() => {
+    if (wallets.length === 0) return;
+    const activeStillValid = Boolean(activeId && wallets.some((w) => w.id === activeId));
+    if (!activeStillValid) {
+      const first = wallets[0]!;
+      setActiveId(first.id);
+      setActiveWalletId(first.id);
+    }
+  }, [wallets, activeId]);
+
   const activeWallet = useMemo(
     () => wallets.find((w) => w.id === activeId) ?? null,
     [wallets, activeId]

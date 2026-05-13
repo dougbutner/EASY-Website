@@ -60,3 +60,13 @@
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   }
 }
+
+/* Jupiter Plugin theme (https://dev.jup.ag/docs/guides/how-to-embed-a-swap-widget) */
+.easy-jupiter-plugin-host {
+  --jupiter-plugin-primary: 234, 179, 8;
+  --jupiter-plugin-background: 0, 0, 0;
+  --jupiter-plugin-primaryText: 254, 252, 232;
+  --jupiter-plugin-warning: 251, 191, 36;
+  --jupiter-plugin-interactive: 39, 39, 42;
+  --jupiter-plugin-module: 24, 24, 27;
+}

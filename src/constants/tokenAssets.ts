@@ -4,6 +4,8 @@ export const TOKEN_LOGO = {
   EASY: '/assets/tokens/easy/EASY.png',
   MEME: '/assets/tokens/meme/meme.png',
   GRAMS: '/assets/tokens/grams/grams-512.png',
+  HARD: '/assets/tokens/hard/HARD-v2-glow.png',
+  INDEX: '/assets/tokens/index/INDEX_xfund.png',
 } as const;
 
 const WON_DIR = '/assets/tokens/won';

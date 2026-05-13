@@ -3,6 +3,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Header } from '@/components/Header';
+import { JupiterEasyPlugin } from '@/components/JupiterEasyPlugin';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,6 +25,18 @@ import {
   flexPoolRewardSymbol,
   type FlexPoolRow,
 } from '@/services/flexPools';
+import {
+  EASY_BRIDGE_CONTRACT,
+  EASY_BRIDGE_WALLET,
+  EASY_MON3Y_CONTRACT,
+  EASY_SOLANA_MINT,
+  fetchEasySolanaDepositAddress,
+  formatEasyQuantity,
+  generateEasySolanaDepositAddress,
+  submitEasySolanaWithdrawal,
+} from '@/services/storexBridge';
+import { fetchBridgeEasySnapshot, type BridgeEasySnapshot } from '@/services/easyBalance';
+import { signUnbroadcastWebAuthTransaction } from '@/services/walletSessions';
 import {
   ExternalLink,
   Globe2,
@@ -64,13 +77,17 @@ type TokenConfig = {
 };
 
 const navItems = [
-  { id: 'tools', label: 'Tools' },
+  { id: 'tools', label: 'Flex town' },
+  { id: 'flex-tools', label: 'Flex Tools' },
   { id: 'what', label: 'What Is EASY' },
-  { id: 'money', label: 'Mon3y' },
+  { id: 'money', label: 'Finance' },
   { id: 'price', label: 'Trade' },
   { id: 'swap', label: 'Swap' },
   { id: 'works', label: 'How It Works' },
-  { id: 'tokens', label: 'Flex Tokens' },
+  { id: 'tokens', label: 'Core Flex' },
+  { id: 'fringe', label: 'Fringe' },
+  { id: 'solana', label: 'Solana' },
+  { id: 'bridge', label: 'Bridge' },
 ];
 
 const tokens: TokenConfig[] = [
@@ -78,7 +95,7 @@ const tokens: TokenConfig[] = [
     symbol: 'EASY',
     contract: 'mon3y',
     title: 'Take it EASY',
-    tagline: 'The first customizable-reflection Flex token.',
+    tagline: 'The keystone customizable-reflection neo+.',
     summary: 'A fair-launched token backed by ranged liquidity and automatic holder rewards.',
     tax: '2% reflection',
     minHold: '100+ EASY',
@@ -165,6 +182,12 @@ const featureCards = [
 const alcorEasySwap = 'https://proton.alcor.exchange/swap?input=XUSDC-xtokens&output=EASY-mon3y';
 const alcorEasySpotTrade = 'https://alcor.exchange/v/xpr/trade/easy-mon3y_xusdc-xtokens';
 const alcorEasySwapWidget = 'https://proton.alcor.exchange/swap-widget?input=XUSDC-xtokens&output=EASY-mon3y';
+const jupiterEasySwap = `https://jup.ag/swap/SOL-${EASY_SOLANA_MINT}`;
+
+/** Storex withdraw API expects a quote id; fixed fee path uses this literal. */
+const BRIDGE_WITHDRAW_QUOTE_ID = 'FIXED';
+/** Shown in UI; XPR → Solana bridge fee (EASY). */
+const BRIDGE_FEE_XPR_TO_SOLANA_EASY = 25;
 
 function tokenLogoUrl(token: TokenConfig, wonRandom: string): string {
   if (token.symbol === 'WON') return wonRandom;
@@ -184,6 +207,7 @@ const Index = () => {
     removeWallet,
     disconnectAll,
     transact,
+    activeWallet,
   } = useProton();
   const [activeSection, setActiveSection] = useState(navItems[0].id);
   const [selectedSymbol, setSelectedSymbol] = useState('EASY');
@@ -195,6 +219,12 @@ const Index = () => {
   const [poolsByContract, setPoolsByContract] = useState<Record<string, FlexPoolRow[]>>({});
   const [selectedPoolRowId, setSelectedPoolRowId] = useState<string | null>(null);
   const [loadingPools, setLoadingPools] = useState(false);
+  const [bridgeLoading, setBridgeLoading] = useState<string | null>(null);
+  const [bridgeDepositAddress, setBridgeDepositAddress] = useState<string | null>(null);
+  const [bridgeWithdrawAddress, setBridgeWithdrawAddress] = useState('');
+  const [bridgeWithdrawAmount, setBridgeWithdrawAmount] = useState('');
+  const [bridgeEasySnap, setBridgeEasySnap] = useState<BridgeEasySnapshot | null>(null);
+  const [bridgeBalanceLoading, setBridgeBalanceLoading] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const [wonLogoUrl] = useState(() => pickRandomWonVariant());
 
@@ -246,6 +276,28 @@ const Index = () => {
 
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!actor || loading) {
+      setBridgeEasySnap(null);
+      return;
+    }
+    let cancelled = false;
+    setBridgeBalanceLoading(true);
+    fetchBridgeEasySnapshot(actor)
+      .then((snap) => {
+        if (!cancelled) setBridgeEasySnap(snap);
+      })
+      .catch(() => {
+        if (!cancelled) setBridgeEasySnap(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBridgeBalanceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [actor, loading]);
 
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -321,6 +373,127 @@ const Index = () => {
     ]);
   };
 
+  const loadBridgeDepositAddress = async () => {
+    if (loading) {
+      toast.error('Wallet is still restoring—wait a moment and try again.');
+      return;
+    }
+    if (!actor) {
+      toast.error('No active account. Open the wallet menu in the header and select a connected wallet.');
+      return;
+    }
+
+    setBridgeLoading('deposit');
+    try {
+      const existing = await fetchEasySolanaDepositAddress(actor);
+      let address = existing.address;
+
+      if (!address) {
+        toast.info('No address yet—creating one.');
+        address = await generateEasySolanaDepositAddress(actor);
+        if (!address) {
+          address = (await fetchEasySolanaDepositAddress(actor)).address;
+        }
+      }
+
+      if (!address) {
+        toast.error('Could not get an address yet. Try again in a moment.');
+        return;
+      }
+
+      setBridgeDepositAddress(address);
+      toast.success('Address ready.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setBridgeLoading(null);
+    }
+  };
+
+  const applyMaxEasyAmount = () => {
+    if (bridgeBalanceLoading) {
+      toast.error('Still loading your balance.');
+      return;
+    }
+    if (!bridgeEasySnap || !Number.isFinite(bridgeEasySnap.balance)) {
+      toast.error('Balance not available yet.');
+      return;
+    }
+    setBridgeWithdrawAmount(bridgeEasySnap.balance.toFixed(6));
+  };
+
+  const withdrawEasyToSolana = async () => {
+    if (loading) {
+      toast.error('Wallet is still restoring—wait a moment and try again.');
+      return;
+    }
+    if (!actor || !activeWallet) {
+      toast.error('Connect a WebAuth wallet first.');
+      return;
+    }
+    if (activeWallet.provider !== 'webauth') {
+      toast.error('Switch to WebAuth in the header to sign this bridge.');
+      return;
+    }
+
+    const destination = bridgeWithdrawAddress.trim();
+    if (!destination) {
+      toast.error('Add your Solana wallet address.');
+      return;
+    }
+
+    let quantity: string;
+    try {
+      quantity = formatEasyQuantity(bridgeWithdrawAmount);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Invalid EASY amount.');
+      return;
+    }
+
+    setBridgeLoading('withdraw');
+    try {
+      let snap = bridgeEasySnap;
+      if (!snap) {
+        try {
+          snap = await fetchBridgeEasySnapshot(actor);
+          setBridgeEasySnap(snap);
+        } catch {
+          // ignore; fall back below
+        }
+      }
+      const signedTransaction = await signUnbroadcastWebAuthTransaction(activeWallet, [
+        {
+          account: EASY_MON3Y_CONTRACT,
+          name: 'transfer',
+          data: {
+            from: actor,
+            to: EASY_BRIDGE_CONTRACT,
+            quantity,
+            memo: `EASY-${EASY_BRIDGE_WALLET}@${destination}`,
+          },
+        },
+      ]);
+
+      await submitEasySolanaWithdrawal({
+        user: actor,
+        signedTransaction,
+        withdrawQuote: BRIDGE_WITHDRAW_QUOTE_ID,
+      });
+
+      toast.success('Sent to the bridge.');
+      setBridgeWithdrawAmount('');
+      try {
+        setBridgeEasySnap(await fetchBridgeEasySnapshot(actor));
+      } catch {
+        // ignore refresh errors
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Bridge did not complete.');
+    } finally {
+      setBridgeLoading(null);
+    }
+  };
+
   return (
     <div className="min-h-screen overflow-hidden bg-black text-yellow-50">
       <Header
@@ -343,25 +516,26 @@ const Index = () => {
         ref={mainRef}
         className="h-screen overflow-y-auto scroll-smooth snap-y snap-mandatory bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,0.2),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(234,179,8,0.12),transparent_32%),#020202]"
       >
-        <SnapSection id="tools" eyebrow="EASY Tools" title="New earth finance for the EASY life.">
-          <div className="grid w-full max-w-7xl gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="space-y-5">
-              <p className="max-w-xl text-lg text-yellow-100/70">
-                Send rewards, change your reward token, or opt out of tax (warning, permanant). Pick a Flex token
-                and take control.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                {featureCards.map((feature) => (
-                  <GlassCard key={feature.title}>
-                    <TokenThumb src={feature.image} alt="" className="h-11 w-11 rounded-xl" />
-                    <h3 className="mt-4 text-xl font-black text-yellow-100">{feature.title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-yellow-100/60">{feature.body}</p>
-                  </GlassCard>
-                ))}
-              </div>
+        <SnapSection id="tools" eyebrow="Flex town" title="New earth finance for the EASY life.">
+          <div className="w-full max-w-7xl space-y-5">
+            <p className="max-w-xl text-lg text-yellow-100/70">
+              Send rewards, change your reward token, or opt out of tax (warning, permanant). Pick a Flex token
+              and take control.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {featureCards.map((feature) => (
+                <GlassCard key={feature.title}>
+                  <TokenThumb src={feature.image} alt="" className="h-11 w-11 rounded-xl" />
+                  <h3 className="mt-4 text-xl font-black text-yellow-100">{feature.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-yellow-100/60">{feature.body}</p>
+                </GlassCard>
+              ))}
             </div>
+          </div>
+        </SnapSection>
 
-            <GlassCard className="p-4 sm:p-6">
+        <SnapSection id="flex-tools" eyebrow="On-chain" title="Flex Tools">
+          <GlassCard className="w-full max-w-7xl p-4 sm:p-6">
               <div className="rounded-[2rem] border border-yellow-300/15 bg-black/60 p-2">
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {tokens.map((token) => {
@@ -636,7 +810,6 @@ const Index = () => {
                 </div>
               </div>
             </GlassCard>
-          </div>
         </SnapSection>
 
         <SnapSection id="what" eyebrow="What is EASY" title="Buy once and stack tokens forever.">
@@ -679,7 +852,7 @@ const Index = () => {
           </div>
         </SnapSection>
 
-        <SnapSection id="money" eyebrow="The New Earth Mon3y" title="Financial energy, routed better.">
+        <SnapSection id="money" eyebrow="The New Earth Finance" title="Financial energy, routed better.">
           <div className="grid w-full max-w-7xl gap-5 md:grid-cols-3">
             {[
               {
@@ -784,7 +957,7 @@ const Index = () => {
           </div>
         </SnapSection>
 
-        <SnapSection id="tokens" eyebrow="Other Flex Tokens" title="EASY is the gateway. WON, GRAMS, and MEME add flavor.">
+        <SnapSection id="tokens" eyebrow="Core Flex Tokens" title="EASY is the gateway. WON, GRAMS, and MEME add flavor.">
           <div className="grid w-full max-w-7xl gap-4 md:grid-cols-2 xl:grid-cols-4">
             {tokens.map((token) => (
               <GlassCard key={token.symbol} className="flex min-h-80 flex-col p-6">
@@ -829,11 +1002,289 @@ const Index = () => {
           </div>
         </SnapSection>
 
-        <div className="snap-start border-t border-yellow-300/15 bg-black/90 px-4 py-12 sm:px-6 lg:px-8">
-          <p className="mx-auto max-w-2xl text-center text-sm leading-relaxed text-yellow-100/45">
-            Built on XPR Network. Token mechanics can change; verify contract actions before high-value calls.
-          </p>
-        </div>
+        <SnapSection id="fringe" eyebrow="Beyond core" title="Fringe Flex Tokens">
+          <div className="w-full max-w-7xl space-y-6">
+            <p className="max-w-3xl text-lg leading-8 text-yellow-100/70">
+              Fringe flex tokens created by volunteers that don't even flex
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+            <GlassCard className="flex min-h-72 flex-col p-6">
+              <div className="flex items-start justify-between gap-4">
+                <TokenThumb src={TOKEN_LOGO.HARD} alt="HARD" className="h-14 w-14 rounded-xl" />
+                <a
+                  href="https://explorer.xprnetwork.org/account/simpletoken?loadContract=true&tab=actions&account=simpletoken&scope=simpletoken&limit=100"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-yellow-300/20 px-3 py-1 text-xs font-bold text-yellow-200 underline-offset-2 hover:bg-yellow-300 hover:text-black hover:underline"
+                >
+                  simpletoken
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <h3 className="mt-6 text-4xl font-black text-yellow-50">HARD</h3>
+              <p className="mt-2 text-sm font-bold uppercase tracking-[0.14em] text-yellow-200/90">HARD@simpletoken</p>
+              <p className="mt-4 flex-1 leading-7 text-yellow-100/65">
+                Our community-led SimpleDex parody of EASY, with no flex mechanics.
+              </p>
+              <a
+                href="https://alcor.exchange/v/xpr/analytics/tokens/hard-simpletoken"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.14em] text-yellow-300 underline-offset-2 hover:text-yellow-100 hover:underline"
+              >
+                Alcor analytics
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-80" />
+              </a>
+              <a
+                href="https://proton.alcor.exchange/swap?input=XUSDC-xtokens&output=HARD-simpletoken"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center justify-center rounded-full border border-yellow-300/25 px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-yellow-200 hover:bg-yellow-300 hover:text-black"
+              >
+                Swap HARD
+              </a>
+            </GlassCard>
+
+            <GlassCard className="flex min-h-72 flex-col p-6">
+              <div className="flex items-start justify-between gap-4">
+                <TokenThumb src={TOKEN_LOGO.INDEX} alt="INDEX" className="h-14 w-14 rounded-xl" />
+                <a
+                  href="https://explorer.xprnetwork.org/account/xfund?loadContract=true&tab=actions&account=xfund&scope=xfund&limit=100"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-yellow-300/20 px-3 py-1 text-xs font-bold text-yellow-200 underline-offset-2 hover:bg-yellow-300 hover:text-black hover:underline"
+                >
+                  xfund
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <h3 className="mt-6 text-4xl font-black text-yellow-50">INDEX</h3>
+              <p className="mt-2 text-sm font-bold uppercase tracking-[0.14em] text-yellow-200/90">INDEX@xfund</p>
+              <p className="mt-4 flex-1 leading-7 text-yellow-100/65">
+                INDEX uses smart-contract buy orders to attempt a 1000:1 soft peg to XPR (currently failing). No flex
+                mechanics. INDEX uses pool fees earned to buy back on spot markets, aiming to repeg to 1000:1 XPR.
+              </p>
+              <a
+                href="https://alcor.exchange/v/xpr/analytics/tokens/index-xfund"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.14em] text-yellow-300 underline-offset-2 hover:text-yellow-100 hover:underline"
+              >
+                Alcor analytics
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-80" />
+              </a>
+              <a
+                href="https://proton.alcor.exchange/swap?input=XUSDC-xtokens&output=INDEX-xfund"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center justify-center rounded-full border border-yellow-300/25 px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-yellow-200 hover:bg-yellow-300 hover:text-black"
+              >
+                Swap INDEX
+              </a>
+            </GlassCard>
+            </div>
+          </div>
+        </SnapSection>
+
+        <SnapSection id="solana" eyebrow="EASY on Solana" title="Same EASY supply, different chain behavior.">
+          <div className="grid w-full max-w-7xl gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="space-y-5">
+              <TokenThumb src={TOKEN_LOGO.EASY} alt="EASY" className="h-16 w-16 rounded-2xl" />
+              <p className="text-xl leading-9 text-yellow-100/75">
+                EASY on Solana uses this mint address:{' '}
+                <span className="break-all font-mono text-yellow-300">{EASY_SOLANA_MINT}</span>.
+              </p>
+              <GlassCard className="space-y-4 p-6">
+                <h3 className="text-2xl font-black text-yellow-50">Important reflection note</h3>
+                <p className="leading-7 text-yellow-100/65">
+                  Flex reflections happen on XPR Network only. EASY held on Solana does not receive reflections,
+                  does not generate reflection tax, and cannot use Flex reward routing until it is bridged back to
+                  XPR.
+                </p>
+                <p className="leading-7 text-yellow-100/60">
+                  Use the bridge below when you want to move EASY between XPR and Solana.
+                </p>
+              </GlassCard>
+              <a
+                href={jupiterEasySwap}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full bg-yellow-300 px-7 py-4 text-sm font-black uppercase tracking-[0.18em] text-black hover:bg-yellow-200"
+              >
+                Open Jupiter
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </div>
+            <div className="overflow-hidden rounded-[2rem] border border-yellow-300/20 bg-black/70 shadow-[0_0_70px_rgba(234,179,8,0.12)]">
+              <JupiterEasyPlugin className="bg-black" />
+            </div>
+          </div>
+        </SnapSection>
+
+        <SnapSection id="bridge" eyebrow="Bridge" title="EASY between XPR and Solana.">
+          <GlassCard className="w-full max-w-7xl p-4 sm:p-6">
+            <div className="grid gap-5 lg:grid-cols-2">
+              <div className="rounded-[2rem] border border-yellow-300/15 bg-black/55 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-2xl font-black text-yellow-50">From EASY on Solana</h3>
+                    <p className="mt-2 leading-7 text-yellow-100/65">
+                      You send EASY on Solana into your personal receive address. It arrives as EASY on your XPR
+                      account.
+                    </p>
+                  </div>
+                  <TokenThumb src={TOKEN_LOGO.EASY} alt="" className="h-12 w-12 rounded-xl" />
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-yellow-300/15 bg-yellow-300/[0.04] p-4">
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-300">Receive address</p>
+                  <p className="mt-3 break-all font-mono text-sm leading-6 text-yellow-100/80">
+                    {bridgeDepositAddress ??
+                      (loading
+                        ? 'One moment…'
+                        : actor
+                          ? 'Tap the button to show your address.'
+                          : 'Connect a wallet in the header first.')}
+                  </p>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+                  <Button
+                    type="button"
+                    onClick={loadBridgeDepositAddress}
+                    disabled={loading || !actor || bridgeLoading !== null}
+                    className="bg-yellow-300 text-black hover:bg-yellow-200"
+                  >
+                    {bridgeLoading === 'deposit' ? 'Loading...' : 'Show my address'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!bridgeDepositAddress}
+                    onClick={() => {
+                      if (!bridgeDepositAddress) return;
+                      void navigator.clipboard?.writeText(bridgeDepositAddress);
+                      toast.success('Copied.');
+                    }}
+                    className="border-yellow-300/30 bg-black/50 text-yellow-100 hover:bg-yellow-300 hover:text-black"
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-[2rem] border border-yellow-300/15 bg-black/55 p-5">
+                <h3 className="text-2xl font-black text-yellow-50">To EASY on Solana</h3>
+                <p className="mt-2 leading-7 text-yellow-100/65">
+                  You send EASY from XPR. It lands as EASY on Solana in the wallet you choose below.
+                </p>
+
+                <div className="mt-5 grid gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bridge-solana-address" className="text-yellow-100/80">
+                      Your Solana wallet
+                    </Label>
+                    <Input
+                      id="bridge-solana-address"
+                      value={bridgeWithdrawAddress}
+                      onChange={(event) => setBridgeWithdrawAddress(event.target.value)}
+                      placeholder="Solana address"
+                      className="border-yellow-300/20 bg-black/70 font-mono text-yellow-50"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <Label htmlFor="bridge-easy-amount" className="text-yellow-100/80">
+                        How much EASY
+                      </Label>
+                      <span className="text-xs text-yellow-100/55">
+                        {bridgeBalanceLoading || loading ? (
+                          'Balance…'
+                        ) : actor && bridgeEasySnap != null ? (
+                          <>
+                            Your EASY on XPR:{' '}
+                            <span className="font-mono font-semibold text-yellow-200/90">
+                              {bridgeEasySnap.balance.toFixed(6)} EASY
+                            </span>
+                          </>
+                        ) : actor ? (
+                          'Balance unavailable'
+                        ) : (
+                          '—'
+                        )}
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        id="bridge-easy-amount"
+                        value={bridgeWithdrawAmount}
+                        onChange={(event) => setBridgeWithdrawAmount(event.target.value)}
+                        placeholder="0.0000"
+                        inputMode="decimal"
+                        className="border-yellow-300/20 bg-black/70 pr-16 text-yellow-50"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={applyMaxEasyAmount}
+                        disabled={
+                          loading ||
+                          bridgeBalanceLoading ||
+                          !bridgeEasySnap ||
+                          !Number.isFinite(bridgeEasySnap.balance)
+                        }
+                        className="absolute right-1 top-1/2 h-8 -translate-y-1/2 px-2 text-xs font-bold uppercase tracking-wide text-yellow-300 hover:bg-yellow-300/15 hover:text-yellow-100"
+                      >
+                        Max
+                      </Button>
+                    </div>
+                    <p className="text-xs text-yellow-100/50">
+                      Bridge fee when leaving XPR for Solana: {BRIDGE_FEE_XPR_TO_SOLANA_EASY} EASY.
+                    </p>
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={withdrawEasyToSolana}
+                    disabled={
+                      loading ||
+                      !actor ||
+                      !bridgeWithdrawAddress.trim() ||
+                      !bridgeWithdrawAmount.trim() ||
+                      bridgeLoading !== null
+                    }
+                    className="w-full bg-yellow-300 text-black hover:bg-yellow-200"
+                  >
+                    {bridgeLoading === 'withdraw' ? 'Sending…' : 'Bridge to Solana'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </GlassCard>
+        </SnapSection>
+
+        <footer className="snap-start border-t border-yellow-300/15 bg-black/95 px-4 py-14 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl space-y-5 text-center text-xs leading-relaxed text-yellow-100/50 sm:text-sm">
+            <p>
+              This site and any wallet actions you take through it are provided for general information only. Nothing
+              here is an offer or solicitation to buy or sell any token, security, or financial instrument, and nothing
+              constitutes legal, tax, or investment advice. Digital assets are experimental, volatile, and may become
+              worthless. Past or described mechanics (including pegs, buybacks, or rewards) are not guarantees of future
+              behavior. Smart contracts and interfaces can contain bugs or change without notice.
+            </p>
+            <p>
+              By using this site you agree that you alone decide whether to interact with on-chain contracts, that you
+              understand the risks of total loss, and that the authors, contributors, and operators of this site disclaim
+              all warranties and all liability—including for indirect or consequential damages—to the fullest extent
+              permitted by law. You use this site and any linked services at your own risk.
+            </p>
+            <p className="text-yellow-100/40">
+              Built on XPR Network. Token mechanics can change; verify contract actions before high-value calls.
+            </p>
+          </div>
+        </footer>
       </main>
     </div>
   );
