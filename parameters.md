@@ -1,0 +1,10 @@
+programming_languages: 
+purpose:
+functionality: 
+inputs:
+outputs: 
+libraries_frameworks: 
+coding_style_conventions: 
+error_handling: 
+comments_documentation: 
+performance_considerations:
