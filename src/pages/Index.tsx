@@ -167,7 +167,7 @@ const tokens: TokenConfig[] = [
     tagline: 'Generational gold—inheritance to any account, reflects XPAXG.',
     summary:
       'Generational wealth stored in gold. Grandchildren-approved with inheritance functionality to any other account. Pure liquid for Paxos Gold, GRAMS reflects XPAXG by default.',
-    tax: '1.1% reflection',
+    tax: '1.1% reflection + 0.11% team',
     minHold: '0.1 GRAMS',
     dexToken: 'GRAMS-gold.mon3y',
     analyticsUrl: 'https://alcor.exchange/v/xpr/analytics/tokens/grams-gold.mon3y',
@@ -225,18 +225,18 @@ const FLEX_MEMO_INTRO =
 const featureCards = [
   {
     image: TOKEN_LOGO.EASY,
-    title: 'Send Rewards',
-    body: 'Run the token distribution call and use your CPU to push pending reflections to holders.',
+    title: 'Send It',
+    body: 'Splash mon3y in the reflection pool on kin, your click sends pending rewards to holders.',
   },
   {
     image: TOKEN_LOGO.GRAMS,
-    title: 'Change Reward Token',
-    body: 'Choose what your reflections buy: EASY, GRAMS, MEME, BTC-style wrapped assets, or the token a pool supports.',
+    title: 'Flex your Reward Token',
+    body: 'Choose your rewards: Let EASY compound or stack OG blue chips like XBTC, XXRP, METAL. Holders of WON and GRAMS can pass on % of rewards to any account, with custom memo feature.',
   },
   {
     image: TOKEN_LOGO.MEME,
-    title: 'Opt Out of Tax',
-    body: 'Call the token-specific opt-out action when an account needs to skip tax and rewards.',
+    title: 'Taxes: Optional in the New Earth',
+    body: 'The fee is optional, but turning it off turns off your rewards - forever.',
   },
 ];
 
@@ -257,7 +257,7 @@ function tokenLogoUrl(token: TokenConfig, wonRandom: string): string {
 }
 
 const FLEX_TOWN_STORY_PARAGRAPHS = [
-  'Flex tokens charge a transfer fee to distribute back to holders as flexible rewards they choose, EASY 2%, GRAMS 1.21%, WON 3% and MEME 2%.',
+  'Flex tokens charge a transfer fee to distribute back to holders as flexible rewards they choose, EASY 2%, GRAMS 1.1% reflection + 0.11% team, WON 3% and MEME 2%.',
   'Choose your Flex token, set your rewards, or let it compound.',
   'MEME offered burns and reflection, and EASY learned that we needed real tokens backing to maintain price.',
   'EASY became the star as the first pure liquid Flex token, surpassing all other community alts on XPR by swap volume.',
@@ -306,6 +306,65 @@ function FlexTownStoryRotator() {
         )}
       >
         {FLEX_TOWN_STORY_PARAGRAPHS[index]}
+      </p>
+    </div>
+  );
+}
+
+const EASY_WHAT_STORY_PARAGRAPHS = [
+  'Buy EASY and stack more EASY forever.',
+  'EASY is a New Earth mon3y experiment, a token on XPR Network that sends you more EASY over time.',
+  "We're testing Gresham's law against USD where holding individual stablecoins becomes bad money compared to the more-liquid EASY, driving industry-trusted stablecoins into 5 xtokens pools for USDC, USDT, XMD, Paxos Dollar, PYUSD, each paired with 4.20M EASY at day 1.",
+  'The price range was set from One Penny to 100k USD(c) for a logical and lucrative absorption of stables.',
+  'This makes EASY a better token to LP with, and because it holds liquid stables, it increases volume in the entire ecosystem.',
+  'Our ecosystem of bi-weekly meetings democratically rewards contributors is funded by a protocol fee each reflection paid from the rewards pool, not individuals.',
+  'Price historically increased; never 2 consecutive negative months or 4 negative consecutive weeks, a strong historic growth partially from constant buybacks with LP pool fees.',
+  "We serve a unique purpose, not to make money for people, but to fix mon3y for people. We hope you enjoy EASY and feel proud to take part in a new type of mon3y, one where the people are rewarded from the entire financial system's activity.",
+  'Because the supply is the same as BTC, this makes EASY a merger of the spirit of Bitcoin and the stability of stables.',
+  'Mining becomes market making, as when anyone acquires EASY, it came from funds that are now a part of the 5 stablecoin pools.',
+  'EASY is easy: more EASY arrives over time. Flex your reward token, or do nothing, just take it EASY 🍹',
+] as const;
+
+function EasyWhatStoryRotator() {
+  const [index, setIndex] = useState(0);
+  const [opaque, setOpaque] = useState(true);
+
+  useEffect(() => {
+    const visibleMs = 6400;
+    const fadeMs = 500;
+    let alive = true;
+
+    const loop = async () => {
+      while (alive) {
+        await new Promise<void>((r) => {
+          window.setTimeout(r, visibleMs);
+        });
+        if (!alive) break;
+        setOpaque(false);
+        await new Promise<void>((r) => {
+          window.setTimeout(r, fadeMs);
+        });
+        if (!alive) break;
+        setIndex((i) => (i + 1) % EASY_WHAT_STORY_PARAGRAPHS.length);
+        setOpaque(true);
+      }
+    };
+
+    void loop();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return (
+    <div className="min-h-[12rem] max-w-xl sm:min-h-[10rem]">
+      <p
+        className={cn(
+          'text-lg leading-relaxed text-yellow-100/70 transition-opacity duration-500 ease-in-out sm:text-xl sm:leading-8',
+          opaque ? 'opacity-100' : 'opacity-0'
+        )}
+      >
+        {EASY_WHAT_STORY_PARAGRAPHS[index]}
       </p>
     </div>
   );
@@ -808,7 +867,7 @@ const Index = () => {
                       />
                       <span className="flex min-w-0 flex-col text-center sm:text-left">
                         <span className="text-xl font-black uppercase tracking-[0.14em] text-yellow-50 sm:text-2xl">
-                          {submitting === 'Send rewards' ? 'Sending…' : 'Send rewards'}
+                          {submitting === 'Send rewards' ? 'Sending…' : 'Send It'}
                         </span>
                         <span className="mt-2 flex items-center justify-center gap-2 text-sm text-yellow-100/70 sm:justify-start">
                           <Send className="h-4 w-4 shrink-0 text-yellow-300/90" />
@@ -837,7 +896,7 @@ const Index = () => {
                         className="h-10 w-10 rounded-lg"
                       />
                       <div>
-                        <h4 className="font-black text-yellow-50">Change Reward Token</h4>
+                        <h4 className="font-black text-yellow-50">Flex your Reward Token</h4>
                         <p className="text-xs text-yellow-100/55">{selectedToken.rewardAction}</p>
                       </div>
                     </div>
@@ -1005,9 +1064,21 @@ const Index = () => {
                       disabled={!isLoggedIn || submitting !== null}
                       className="max-w-md text-right text-[11px] leading-snug text-yellow-100/35 underline-offset-2 transition hover:text-yellow-100/55 hover:underline disabled:pointer-events-none disabled:opacity-30"
                     >
-                      {submitting === 'Renounce rewards'
-                        ? 'Submitting renounce…'
-                        : `Opt out of tax (${selectedToken.optOutAction}) — renounce rewards forever`}
+                      {submitting === 'Renounce rewards' ? (
+                        'Submitting…'
+                      ) : (
+                        <span className="block text-left sm:text-right">
+                          <span className="block font-semibold text-yellow-100/50">
+                            Taxes: Optional in the New Earth
+                          </span>
+                          <span className="mt-1 block text-yellow-100/35">
+                            The fee is optional, but turning it off turns off your rewards - forever.
+                          </span>
+                          <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-wider text-yellow-100/25">
+                            {selectedToken.optOutAction}
+                          </span>
+                        </span>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -1015,19 +1086,12 @@ const Index = () => {
             </GlassCard>
         </SnapSection>
 
-        <SnapSection id="what" eyebrow="What is EASY" title="Buy once and stack tokens forever.">
+        <SnapSection id="what" eyebrow="What is EASY" title="Buy EASY and stack more EASY forever.">
           <div className="grid w-full max-w-7xl gap-8 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="space-y-6">
-              <p className="text-xl leading-9 text-yellow-100/75">
-                EASY is a Flex token on XPR Network: a reflexive money experiment where token movement fills a
-                reward pool, then holders receive proportional rewards directly in their wallet.
-              </p>
-              <p className="text-lg leading-8 text-yellow-100/60">
-                Hold EASY and the default experience is simple: more EASY arrives over time. Flex your reward
-                token and the same reflection flow can route into another supported token instead.
-              </p>
+              <EasyWhatStoryRotator />
               <div className="grid gap-3 sm:grid-cols-3">
-                <Metric value="21M" label="Max EASY supply" />
+                <Metric value="21M" label="Max EASY supply 100% minted" />
                 <Metric value="2%" label="Reflection tax" />
                 <Metric value="100%" label="Launched into pools" />
               </div>
@@ -1040,8 +1104,8 @@ const Index = () => {
               </div>
               <h3 className="mt-8 text-4xl font-black text-yellow-50">Take it EASY 🍹.</h3>
               <p className="mt-4 text-yellow-100/65">
-                The page is intentionally one move at a time: connect, choose the token, make the call, or jump
-                into the live Alcor market.
+                Read in-depth about the tokens, smart contracts, contributors club in our Flex Report, basically a
+                white paper.
               </p>
               <a
                 href="https://flex.report"
