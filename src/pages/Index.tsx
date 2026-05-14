@@ -240,11 +240,11 @@ const featureCards = [
   },
 ];
 
-/** Alcor swap / widget — prefer routed `alcor.exchange/v/xpr/...` URLs. */
+/** Open Alcor / terminal use routed `alcor.exchange/v/xpr/...`; swap iframe uses `proton.alcor.exchange` for reliable token loading. */
 const alcorEasyTerminal = 'https://alcor.exchange/v/xpr/terminal/easy-mon3y';
 const alcorEasySwap = 'https://alcor.exchange/v/xpr/swap?input=XUSDC-xtokens&output=EASY-mon3y';
 const alcorEasySpotTrade = 'https://alcor.exchange/v/xpr/trade/easy-mon3y_xusdc-xtokens';
-const alcorEasySwapWidget = 'https://alcor.exchange/v/xpr/swap-widget?input=XUSDC-xtokens&output=EASY-mon3y';
+const alcorEasySwapWidget = 'https://proton.alcor.exchange/swap-widget?input=XUSDC-xtokens&output=EASY-mon3y';
 const fractalWhitePaperUrl = 'https://fractally.com/uploads/Fractally%20White%20Paper%201.0.pdf';
 const contributorsClubCalendarUrl =
   'https://calendar.google.com/calendar/u/0/r/eventedit?text=Contributors+Club&dates=20260127T170000Z/20260127T180000Z&details=Share+your+contributions+to+EASY+and+WON+in+3-5+minutes+and+rank+others+to+distribute+shares.+www.flex.town.%0A%0AAlways+5PM+UTC%0AReal+Link:+https://meet.google.com/dqq-yian-hch&location=https://meet.google.com/dqq-yian-hch&recur=RRULE:FREQ%3DWEEKLY;INTERVAL%3D2;BYDAY%3DTU';
@@ -329,7 +329,8 @@ const howItWorksSteps: { step: string; title: string; body: ReactNode }[] = [
   },
 ];
 
-const jupiterEasySwap = `https://jup.ag/swap/SOL-${EASY_SOLANA_MINT}`;
+const solanaWrappedSolMint = 'So11111111111111111111111111111111111111112';
+const jupiterEasySwap = `https://jup.ag/swap?sell=${solanaWrappedSolMint}&buy=${EASY_SOLANA_MINT}`;
 
 /** Storex withdraw API expects a quote id; fixed fee path uses this literal. */
 const BRIDGE_WITHDRAW_QUOTE_ID = 'FIXED';
@@ -1437,18 +1438,22 @@ const Index = () => {
             <div className="space-y-5">
               <TokenThumb src={TOKEN_LOGO.EASY} alt="EASY" className="h-16 w-16 rounded-2xl" />
               <p className="text-xl leading-9 text-yellow-100/75">
-                EASY on Solana uses this mint address:{' '}
-                <span className="break-all font-mono text-yellow-300">{EASY_SOLANA_MINT}</span>.
+                Official EASY on Solana:{' '}
+                <a
+                  href={`https://orbmarkets.io/token/${EASY_SOLANA_MINT}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={inlineLinkClass}
+                >
+                  <span className="break-all font-mono">{EASY_SOLANA_MINT}</span>
+                </a>
+                .
               </p>
               <GlassCard className="space-y-4 p-6">
-                <h3 className="text-2xl font-black text-yellow-50">Important reflection note</h3>
+                <h3 className="text-2xl font-black text-yellow-50">Important Solana note</h3>
                 <p className="leading-7 text-yellow-100/65">
-                  Flex reflections happen on XPR Network only. EASY held on Solana does not receive reflections,
-                  does not generate reflection tax, and cannot use Flex reward routing until it is bridged back to
-                  XPR.
-                </p>
-                <p className="leading-7 text-yellow-100/60">
-                  Use the bridge below when you want to move EASY between XPR and Solana.
+                  Flex reflections happen on XPR Network only. EASY held on Solana does not receive reflections, and 2%
+                  fee is used to LP. Bridge to and from XPR Network on this site.
                 </p>
               </GlassCard>
               <a

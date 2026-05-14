@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const JUPITER_INTEGRATED_TARGET_ID = 'easy-jupiter-plugin-integrated';
-const JUPITER_FALLBACK_SWAP = `https://jup.ag/swap/SOL-${EASY_SOLANA_MINT}`;
+const JUPITER_FALLBACK_SWAP = `https://jup.ag/swap?sell=${SOL_MINT}&buy=${EASY_SOLANA_MINT}`;
 
 async function waitForJupiter(timeoutMs: number): Promise<void> {
   const start = Date.now();
