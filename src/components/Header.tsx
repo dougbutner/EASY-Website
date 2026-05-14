@@ -13,7 +13,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { TOKEN_LOGO } from '@/constants/tokenAssets';
 import { walletTypeLabel, type LoadedWallet } from '@/services/walletSessions';
-import { Anchor, ChevronDown, Copy, LogIn, Plus, Wallet, X } from 'lucide-react';
+import { Anchor, ChevronDown, Copy, LogIn, Plus, RefreshCw, Wallet, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -37,6 +37,9 @@ interface HeaderProps {
   navItems?: HeaderNavItem[];
   activeSection?: string;
   onNavigate?: (id: string) => void;
+  /** Shown beside the Flex Tools nav control; refetches pending reflection pool balances. */
+  onRefreshPendingBalance?: () => void;
+  pendingBalanceLoading?: boolean;
 }
 
 export function Header({
@@ -53,6 +56,8 @@ export function Header({
   navItems = [],
   activeSection,
   onNavigate,
+  onRefreshPendingBalance,
+  pendingBalanceLoading = false,
 }: HeaderProps) {
   const navRef = useRef<HTMLDivElement>(null);
 
@@ -101,21 +106,40 @@ export function Header({
           >
             {navItems.map((item) => {
               const active = item.id === activeSection;
+              const showPendingRefresh = item.id === 'flex-tools' && onRefreshPendingBalance;
               return (
-                <button
-                  key={item.id}
-                  type="button"
-                  data-section-id={item.id}
-                  onClick={() => onNavigate?.(item.id)}
-                  className={cn(
-                    'shrink-0 rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] transition',
-                    active
-                      ? 'bg-yellow-300 text-black shadow-[0_0_24px_rgba(250,204,21,0.28)]'
-                      : 'text-yellow-100/65 hover:bg-yellow-300/10 hover:text-yellow-200'
-                  )}
-                >
-                  {item.label}
-                </button>
+                <div key={item.id} className="flex shrink-0 items-center gap-0.5">
+                  <button
+                    type="button"
+                    data-section-id={item.id}
+                    onClick={() => onNavigate?.(item.id)}
+                    className={cn(
+                      'shrink-0 rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] transition',
+                      active
+                        ? 'bg-yellow-300 text-black shadow-[0_0_24px_rgba(250,204,21,0.28)]'
+                        : 'text-yellow-100/65 hover:bg-yellow-300/10 hover:text-yellow-200'
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                  {showPendingRefresh ? (
+                    <button
+                      type="button"
+                      aria-label="Refresh pending reflection pool balance"
+                      disabled={pendingBalanceLoading}
+                      onClick={() => onRefreshPendingBalance()}
+                      className={cn(
+                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-yellow-400/20 text-yellow-200/80 transition hover:border-yellow-300/40 hover:bg-yellow-300/10 hover:text-yellow-50 disabled:pointer-events-none disabled:opacity-40',
+                        pendingBalanceLoading && 'border-yellow-300/35 bg-yellow-300/5'
+                      )}
+                    >
+                      <RefreshCw
+                        className={cn('h-3.5 w-3.5', pendingBalanceLoading && 'animate-spin')}
+                        aria-hidden
+                      />
+                    </button>
+                  ) : null}
+                </div>
               );
             })}
           </nav>

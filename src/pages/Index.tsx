@@ -240,10 +240,95 @@ const featureCards = [
   },
 ];
 
-/** Swap UI (`/swap`, `/swap-widget`) uses proton.alcor.exchange for reliable token loading; other Alcor links/embeds use `alcor.exchange/v/xpr/...`. */
-const alcorEasySwap = 'https://proton.alcor.exchange/swap?input=XUSDC-xtokens&output=EASY-mon3y';
+/** Alcor swap / widget — prefer routed `alcor.exchange/v/xpr/...` URLs. */
+const alcorEasyTerminal = 'https://alcor.exchange/v/xpr/terminal/easy-mon3y';
+const alcorEasySwap = 'https://alcor.exchange/v/xpr/swap?input=XUSDC-xtokens&output=EASY-mon3y';
 const alcorEasySpotTrade = 'https://alcor.exchange/v/xpr/trade/easy-mon3y_xusdc-xtokens';
-const alcorEasySwapWidget = 'https://proton.alcor.exchange/swap-widget?input=XUSDC-xtokens&output=EASY-mon3y';
+const alcorEasySwapWidget = 'https://alcor.exchange/v/xpr/swap-widget?input=XUSDC-xtokens&output=EASY-mon3y';
+const fractalWhitePaperUrl = 'https://fractally.com/uploads/Fractally%20White%20Paper%201.0.pdf';
+const contributorsClubCalendarUrl =
+  'https://calendar.google.com/calendar/u/0/r/eventedit?text=Contributors+Club&dates=20260127T170000Z/20260127T180000Z&details=Share+your+contributions+to+EASY+and+WON+in+3-5+minutes+and+rank+others+to+distribute+shares.+www.flex.town.%0A%0AAlways+5PM+UTC%0AReal+Link:+https://meet.google.com/dqq-yian-hch&location=https://meet.google.com/dqq-yian-hch&recur=RRULE:FREQ%3DWEEKLY;INTERVAL%3D2;BYDAY%3DTU';
+
+const inlineLinkClass =
+  'font-bold text-yellow-300 underline-offset-2 hover:text-yellow-100 hover:underline';
+
+const codeInlineClass = 'rounded bg-yellow-300/10 px-1 py-0.5 text-[0.9em] text-yellow-200';
+
+const howItWorksSteps: { step: string; title: string; body: ReactNode }[] = [
+  {
+    step: '1',
+    title: 'Ranged liquidity day 0',
+    body: (
+      <>
+        Pump and dump market mechanics come from pricing initial market cap too low, dangerous due to outstanding supply
+        valued multiples higher than when it was removed in the pool. We ranged EASY starting at 210K, one shiny penny,
+        maxing out at a 2.1T market cap, 100K. This magic range allows initial buys to be a gift but not a steal,
+        keeping enough allocated EASY for reliable mon3y supply to BTC-level prices. Pure liquid tokens: EASY (for
+        USDish) WON (for EASY), and GRAMS (for XPAXG)
+      </>
+    ),
+  },
+  {
+    step: '2',
+    title: 'Abundance in Arbitrage',
+    body: (
+      <>
+        Price differences of Alcor to Metal DEX are always eaten by bots when EASY is pooled with the assets. Bots
+        trigger trades and pay the transfer fees we pass to the holders, themselves also profiting, but often much less
+        than we do.
+        <span className="mt-3 block">
+          Reliable volume from the outside crypto world enables liquidity provision as a healthy side hustle with wider
+          market movements mirrored to XPR Network via <code className={codeInlineClass}>xtokens</code> like XBTC,
+          XXRP, XETH, XSOL.
+        </span>
+      </>
+    ),
+  },
+  {
+    step: '3',
+    title: 'Reflection pool',
+    body: (
+      <>
+        Watch the tax accumulate on-chain until someone musters a clicks to send it. Technically called Reflection Pool
+        on the contract, it&apos;s where the tokens collect before being splashed to wallets. There&apos;s also a burn
+        pool on all and project pool for WON and GRAMS, but only MEME uses the burn pool.
+      </>
+    ),
+  },
+  {
+    step: '4',
+    title: 'Fractal Volunteer Organization',
+    body: (
+      <>
+        We{' '}
+        <a
+          href={contributorsClubCalendarUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={inlineLinkClass}
+        >
+          meet
+        </a>{' '}
+        every 2 weeks to present + celebrate what we&apos;ve done for Flex tokens in a{' '}
+        <a href={fractalWhitePaperUrl} target="_blank" rel="noopener noreferrer" className={inlineLinkClass}>
+          fractal
+        </a>{' '}
+        process, check flex charts, and gossip the latest on EASY, XPR, crypto. EASY served top 3 consensus-chosen
+        winners.{' '}
+        <a
+          href={contributorsClubCalendarUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={inlineLinkClass}
+        >
+          Join us
+        </a>
+        .
+      </>
+    ),
+  },
+];
+
 const jupiterEasySwap = `https://jup.ag/swap/SOL-${EASY_SOLANA_MINT}`;
 
 /** Storex withdraw API expects a quote id; fixed fee path uses this literal. */
@@ -746,13 +831,15 @@ const Index = () => {
         navItems={navItems}
         activeSection={activeSection}
         onNavigate={scrollToSection}
+        onRefreshPendingBalance={() => setChainReadEpoch((n) => n + 1)}
+        pendingBalanceLoading={reflectionPoolLoading}
       />
 
       <main
         ref={mainRef}
         className="h-screen overflow-y-auto scroll-smooth snap-y snap-mandatory bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,0.2),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(234,179,8,0.12),transparent_32%),#020202]"
       >
-        <SnapSection id="tools" eyebrow="Flex town" title="New earth finance for the EASY life.">
+        <SnapSection id="tools" eyebrow="Flex town" title="New Earth finance for the EASY life 🍹">
           <div className="w-full max-w-7xl space-y-5">
             <FlexTownStoryRotator />
             <div className="grid gap-3 sm:grid-cols-3">
@@ -1064,21 +1151,9 @@ const Index = () => {
                       disabled={!isLoggedIn || submitting !== null}
                       className="max-w-md text-right text-[11px] leading-snug text-yellow-100/35 underline-offset-2 transition hover:text-yellow-100/55 hover:underline disabled:pointer-events-none disabled:opacity-30"
                     >
-                      {submitting === 'Renounce rewards' ? (
-                        'Submitting…'
-                      ) : (
-                        <span className="block text-left sm:text-right">
-                          <span className="block font-semibold text-yellow-100/50">
-                            Taxes: Optional in the New Earth
-                          </span>
-                          <span className="mt-1 block text-yellow-100/35">
-                            The fee is optional, but turning it off turns off your rewards - forever.
-                          </span>
-                          <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-wider text-yellow-100/25">
-                            {selectedToken.optOutAction}
-                          </span>
-                        </span>
-                      )}
+                      {submitting === 'Renounce rewards'
+                        ? 'Submitting renounce…'
+                        : `Opt out of tax (${selectedToken.optOutAction}) — renounce rewards forever`}
                     </button>
                   </div>
                 </div>
@@ -1119,23 +1194,24 @@ const Index = () => {
           </div>
         </SnapSection>
 
-        <SnapSection id="money" eyebrow="The New Earth Finance" title="Financial energy, routed better.">
+        <SnapSection id="money" eyebrow="The New Earth Finance" title="Financial energy channeled for planetary evolution.">
           <div className="grid w-full max-w-7xl gap-5 md:grid-cols-3">
             {[
               {
                 icon: Globe2,
-                title: 'Transparent Flow',
-                body: 'Token taxes, reward pools, burns, and distribution calls are public contract activity.',
+                title: 'True Liquid Economies',
+                body:
+                  '100% of supply for GRAMS, WON, and EASY "vaulted" into liquidity pools, meaning all tokens out of the pool tokens were paid for and gained backing at the time they were bought. All Distributions aren\'t random inflation, they are from the transfer fee.',
               },
               {
                 icon: Sprout,
                 title: 'Reflexive Rewards',
-                body: 'Activity from the market can feed holders instead of leaking value out of the community.',
+                body: 'The first tokens to allow each person to pick a separate reward token, and to allow beneficiaries of the reward for WON and GRAMS.',
               },
               {
                 icon: Network,
-                title: 'Composable Economy',
-                body: 'Flex tokens can route rewards into each other, wrapped assets, community budgets, and future pools.',
+                title: 'Complete Economy',
+                body: 'Flex tokens work together, and cover different areas, from stables, to gold, to alts. They offer rewards in each other, and connect to the wider crypto economy by providing liquidity in markets with wrapped assets like XBTC.',
               },
             ].map((item) => (
               <GlassCard key={item.title} className="min-h-72 p-7">
@@ -1150,7 +1226,16 @@ const Index = () => {
         <SnapSection id="price" eyebrow="EASY / XUSDC" title="Trade on Alcor">
           <div className="flex w-full max-w-6xl flex-col gap-5">
             <p className="text-base leading-relaxed text-yellow-100/70">
-              Live EASY/XUSDC spot order book on Alcor. Open token analytics for{' '}
+              See live trades, know the top holders, check prices, and buy in from{' '}
+              <a
+                href={alcorEasyTerminal}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={inlineLinkClass}
+              >
+                Alcor
+              </a>
+              . Search in middle right. Open token analytics for{' '}
               {tokens.map((token, i) => (
                 <span key={token.symbol}>
                   {i > 0 ? ' ' : null}
@@ -1182,8 +1267,7 @@ const Index = () => {
             <div className="space-y-5">
               <TokenThumb src={TOKEN_LOGO.EASY} alt="EASY" className="h-14 w-14 rounded-2xl" />
               <p className="text-xl leading-9 text-yellow-100/75">
-                The swap widget is preloaded from XUSDC to EASY. Change the input token in Alcor when your wallet
-                holds something else.
+                The best way to get EASY is to swap with a stablecoin, max $500 at a time to avoid slippage.
               </p>
               <a
                 href={alcorEasySwap}
@@ -1207,18 +1291,13 @@ const Index = () => {
 
         <SnapSection id="works" eyebrow="How it works" title="Ranged liquidity below, reflections above.">
           <div className="grid w-full max-w-7xl gap-5 lg:grid-cols-4">
-            {[
-              ['1', 'Ranged pools', 'EASY launched into stablecoin pools across price ranges so buyers and bots can trade against deep rails.'],
-              ['2', 'Market movement', 'Swaps and transfers create fee flow. Alcor pools collect swap fees while token contracts collect reflection tax.'],
-              ['3', 'Reward pool', 'Reflection tax accumulates on-chain until someone runs the distribution action for the token.'],
-              ['4', 'Wallet rewards', 'Eligible holders receive proportional rewards, optionally routed into their chosen Flex token.'],
-            ].map(([step, title, body]) => (
+            {howItWorksSteps.map(({ step, title, body }) => (
               <GlassCard key={step} className="p-6">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-yellow-300 text-xl font-black text-black">
                   {step}
                 </div>
                 <h3 className="mt-8 text-2xl font-black text-yellow-50">{title}</h3>
-                <p className="mt-4 leading-7 text-yellow-100/60">{body}</p>
+                <div className="mt-4 leading-7 text-yellow-100/60">{body}</div>
               </GlassCard>
             ))}
           </div>
