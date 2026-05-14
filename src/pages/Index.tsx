@@ -1,7 +1,7 @@
 /**
  * Index page — EASY one-page snap-scroll landing and token tools.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Header } from '@/components/Header';
 import { JupiterEasyPlugin } from '@/components/JupiterEasyPlugin';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,10 @@ import {
   flexPoolRewardSymbol,
   type FlexPoolRow,
 } from '@/services/flexPools';
-import { fetchFlexersBalance } from '@/services/flexFlexerBalance';
+import {
+  fetchReflectionPoolBalance,
+  formatFlexAssetPretty,
+} from '@/services/flexFlexerBalance';
 import {
   EASY_BRIDGE_CONTRACT,
   EASY_BRIDGE_WALLET,
@@ -88,7 +91,7 @@ type TokenConfig = {
   contract: string;
   title: string;
   tagline: string;
-  summary: string;
+  summary: ReactNode;
   tax: string;
   minHold: string;
   dexToken: string;
@@ -99,6 +102,8 @@ type TokenConfig = {
   optOutAction: string;
   treeAction?: string;
   memoAction?: string;
+  /** Shown after `Min.` for reflection-route floor copy (per token). */
+  reflectionRouteMin: string;
   /** Public URL under `/assets/tokens/`. Omit for WON — a random variant is picked once per page load. */
   logoPath?: string;
 };
@@ -122,8 +127,9 @@ const tokens: TokenConfig[] = [
     symbol: 'EASY',
     contract: 'mon3y',
     title: 'Take it EASY 🍹',
-    tagline: 'The keystone customizable-reflection neo+.',
-    summary: 'A fair-launched token backed by ranged liquidity and automatic holder rewards.',
+    tagline: 'The blue-chip flex—pure liquid reflections on Alcor.',
+    summary:
+      "The blue-chip flex, EASY delivers more reflections and is pure liquid for stables. Gresham's law unfolding, we do more volume on Alcor than USDC.",
     tax: '2% reflection',
     minHold: '100+ EASY',
     dexToken: 'EASY-mon3y',
@@ -133,13 +139,15 @@ const tokens: TokenConfig[] = [
     sendAction: 'distribute',
     rewardAction: 'setflextoken',
     optOutAction: 'noflexzone',
+    reflectionRouteMin: '1,000 EASY',
   },
   {
     symbol: 'WON',
     contract: 'w3won',
     title: 'We WON ⓦ',
-    tagline: 'EASY-backed reflections for ecovillage tokenization.',
-    summary: 'WON routes reflections and a project budget toward real-world community work.',
+    tagline: 'Rotating default reflection for New Earth—sponsor projects, gift tokens.',
+    summary:
+      'WON uses a changing default reflection token to benefit New Earth through giving you tokens from new projects. Currently reflects EASY until we have a project to sponsor.',
     tax: '2.2% reflection + 0.8% team',
     minHold: '1+ WON',
     dexToken: 'WON-w3won',
@@ -150,13 +158,15 @@ const tokens: TokenConfig[] = [
     optOutAction: 'optoutoftax',
     treeAction: 'settree',
     memoAction: 'settreememo',
+    reflectionRouteMin: '8 WON',
   },
   {
     symbol: 'GRAMS',
     contract: 'gold.mon3y',
     title: 'Golden GRAMS',
-    tagline: 'A Flex-token family member with inheritance-style routing.',
-    summary: 'GRAMS uses its own action names for reward choice, tax opt-out, and inheritance.',
+    tagline: 'Generational gold—inheritance to any account, reflects XPAXG.',
+    summary:
+      'Generational wealth stored in gold. Grandchildren-approved with inheritance functionality to any other account. Pure liquid for Paxos Gold, GRAMS reflects XPAXG by default.',
     tax: '1.1% reflection',
     minHold: '0.1 GRAMS',
     dexToken: 'GRAMS-gold.mon3y',
@@ -168,13 +178,27 @@ const tokens: TokenConfig[] = [
     optOutAction: 'renounce',
     treeAction: 'inheritance',
     memoAction: 'inheritmemo',
+    reflectionRouteMin: '0.1 GRAMS',
   },
   {
     symbol: 'MEME',
     contract: 'm3m3',
     title: 'GM Degens 🍦',
-    tagline: 'The burn-heavy Flex token for farms, culture, and laughs.',
-    summary: 'MEME splits activity between holder reflections and supply burn mechanics.',
+    tagline: 'Fun-first Flex for Alcor farms—unbacked, slow-burn meme ruler.',
+    summary: (
+      <>
+        MEME is totally for fun and used to reward{' '}
+        <a
+          href="https://proton.alcor.exchange/farm"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-yellow-200/90 underline underline-offset-2 hover:text-yellow-50"
+        >
+          farms
+        </a>{' '}
+        {` on XPR. Not pure liquid, not backed, good 'ol fashion slow-burn meme token to rule all meme tokens.`}
+      </>
+    ),
     tax: '1% reflection + 1% burn',
     minHold: '1M+ MEME',
     dexToken: 'MEME-m3m3',
@@ -184,6 +208,7 @@ const tokens: TokenConfig[] = [
     sendAction: 'distribute',
     rewardAction: 'setflextoken',
     optOutAction: 'noflexzone',
+    reflectionRouteMin: '10M MEME',
   },
 ];
 
@@ -196,10 +221,6 @@ const DEFAULT_FLEX_BENEFIT_MEMO: Partial<Record<string, string>> = {
 
 const FLEX_MEMO_INTRO =
   'Create a custom memo to activate other contracts, or just say hello.';
-
-/** Rough on-chain guide for ~1 minute of reflection accrual in `flexers` pending (approximate). */
-const FLEX_REFLECTION_MIN_NOTE =
-  'Rough guide for ~1 min of reflection in pending: about 8 WON, 0.1 GRAMS, 1,000 EASY, or 10M MEME (pool + activity dependent).';
 
 const featureCards = [
   {
@@ -235,6 +256,61 @@ function tokenLogoUrl(token: TokenConfig, wonRandom: string): string {
   return token.logoPath ?? TOKEN_LOGO.EASY;
 }
 
+const FLEX_TOWN_STORY_PARAGRAPHS = [
+  'Flex tokens charge a transfer fee to distribute back to holders as flexible rewards they choose, EASY 2%, GRAMS 1.21%, WON 3% and MEME 2%.',
+  'Choose your Flex token, set your rewards, or let it compound.',
+  'MEME offered burns and reflection, and EASY learned that we needed real tokens backing to maintain price.',
+  'EASY became the star as the first pure liquid Flex token, surpassing all other community alts on XPR by swap volume.',
+  'WON expanded the tech to custom memos and beneficiaries pure liquid, and brought the focus to building the New Earth in real life tokenizing one project at a time.',
+  'GRAMS kept the tech improvements with a chain-wide gilding quest, pure liquid gold reflecting Paxos gold.',
+  'Flex Tokens seek the most efficient path for finance to fuel the New Earth.',
+] as const;
+
+function FlexTownStoryRotator() {
+  const [index, setIndex] = useState(0);
+  const [opaque, setOpaque] = useState(true);
+
+  useEffect(() => {
+    const visibleMs = 6400;
+    const fadeMs = 500;
+    let alive = true;
+
+    const loop = async () => {
+      while (alive) {
+        await new Promise<void>((r) => {
+          window.setTimeout(r, visibleMs);
+        });
+        if (!alive) break;
+        setOpaque(false);
+        await new Promise<void>((r) => {
+          window.setTimeout(r, fadeMs);
+        });
+        if (!alive) break;
+        setIndex((i) => (i + 1) % FLEX_TOWN_STORY_PARAGRAPHS.length);
+        setOpaque(true);
+      }
+    };
+
+    void loop();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return (
+    <div className="min-h-[9rem] max-w-xl sm:min-h-[8rem]">
+      <p
+        className={cn(
+          'text-lg leading-relaxed text-yellow-100/70 transition-opacity duration-500 ease-in-out',
+          opaque ? 'opacity-100' : 'opacity-0'
+        )}
+      >
+        {FLEX_TOWN_STORY_PARAGRAPHS[index]}
+      </p>
+    </div>
+  );
+}
+
 const Index = () => {
   const {
     actor,
@@ -268,9 +344,9 @@ const Index = () => {
   const [bridgeWithdrawAmount, setBridgeWithdrawAmount] = useState('');
   const [bridgeEasySnap, setBridgeEasySnap] = useState<BridgeEasySnapshot | null>(null);
   const [bridgeBalanceLoading, setBridgeBalanceLoading] = useState(false);
-  const [flexerBalanceBySymbol, setFlexerBalanceBySymbol] = useState<Record<string, string | null>>({});
-  const [flexerBalanceLoading, setFlexerBalanceLoading] = useState(false);
-  const [flexerEpoch, setFlexerEpoch] = useState(0);
+  const [reflectionPoolBySymbol, setReflectionPoolBySymbol] = useState<Record<string, string | null>>({});
+  const [reflectionPoolLoading, setReflectionPoolLoading] = useState(false);
+  const [chainReadEpoch, setChainReadEpoch] = useState(0);
   const mainRef = useRef<HTMLElement>(null);
   const [wonLogoUrl] = useState(() => pickRandomWonVariant());
 
@@ -287,36 +363,32 @@ const Index = () => {
   }, [selectedSymbol]);
 
   useEffect(() => {
-    if (loading || !actor) {
-      setFlexerBalanceBySymbol({});
-      setFlexerBalanceLoading(false);
-      return;
-    }
     let cancelled = false;
-    setFlexerBalanceBySymbol({});
-    setFlexerBalanceLoading(true);
+    setReflectionPoolBySymbol({});
+    setReflectionPoolLoading(true);
     void (async () => {
       try {
         const pairs = await Promise.all(
           tokens.map(async (t) => {
-            const bal = await fetchFlexersBalance(t.contract, actor);
-            return [t.symbol, bal] as const;
+            const pool = await fetchReflectionPoolBalance(t.contract, t.symbol);
+            return [t.symbol, pool] as const;
           })
         );
-        if (!cancelled) setFlexerBalanceBySymbol(Object.fromEntries(pairs));
+        if (!cancelled) setReflectionPoolBySymbol(Object.fromEntries(pairs));
       } catch {
-        if (!cancelled) setFlexerBalanceBySymbol({});
+        if (!cancelled) setReflectionPoolBySymbol({});
       } finally {
-        if (!cancelled) setFlexerBalanceLoading(false);
+        if (!cancelled) setReflectionPoolLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [actor, loading, flexerEpoch, tokens]);
+  }, [chainReadEpoch, tokens]);
 
   const poolRows = poolsByContract[selectedToken.contract] ?? [];
   const poolsLoaded = poolRows.length > 0;
+  const selectedReflectionPoolRaw = reflectionPoolBySymbol[selectedToken.symbol];
 
   const loadFlexPools = async () => {
     setLoadingPools(true);
@@ -417,7 +489,7 @@ const Index = () => {
       } else {
         toast.success(message, baseOpts);
       }
-      setFlexerEpoch((n) => n + 1);
+      setChainReadEpoch((n) => n + 1);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `${label} failed.`);
     } finally {
@@ -623,10 +695,7 @@ const Index = () => {
       >
         <SnapSection id="tools" eyebrow="Flex town" title="New earth finance for the EASY life.">
           <div className="w-full max-w-7xl space-y-5">
-            <p className="max-w-xl text-lg text-yellow-100/70">
-              Send rewards, change your reward token, or opt out of tax (warning, permanant). Pick a Flex token
-              and take control.
-            </p>
+            <FlexTownStoryRotator />
             <div className="grid gap-3 sm:grid-cols-3">
               {featureCards.map((feature) => (
                 <GlassCard key={feature.title}>
@@ -645,6 +714,7 @@ const Index = () => {
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {tokens.map((token) => {
                     const selected = token.symbol === selectedSymbol;
+                    const poolRaw = reflectionPoolBySymbol[token.symbol];
                     return (
                       <button
                         key={token.symbol}
@@ -681,13 +751,11 @@ const Index = () => {
                             selected ? 'text-black/55' : 'text-yellow-100/45'
                           )}
                         >
-                          {!actor
-                            ? `Acquire ${token.symbol}`
-                            : flexerBalanceLoading
-                              ? '…'
-                              : flexerBalanceBySymbol[token.symbol]
-                                ? `Balance ${flexerBalanceBySymbol[token.symbol]}`
-                                : `Acquire ${token.symbol}`}
+                          {reflectionPoolLoading
+                            ? 'Pending …'
+                            : poolRaw
+                              ? `Pending ${formatFlexAssetPretty(poolRaw)}`
+                              : 'Pending —'}
                         </span>
                       </button>
                     );
@@ -752,7 +820,11 @@ const Index = () => {
                     </button>
                   </div>
                   <p className="mx-auto mt-3 max-w-md px-2 text-center text-[10px] leading-relaxed text-yellow-100/40">
-                    {FLEX_REFLECTION_MIN_NOTE}
+                    {reflectionPoolLoading
+                      ? `Pending … Min. ${selectedToken.reflectionRouteMin}`
+                      : selectedReflectionPoolRaw
+                        ? `Pending ${formatFlexAssetPretty(selectedReflectionPoolRaw)} Min. ${selectedToken.reflectionRouteMin}`
+                        : `Pending — Min. ${selectedToken.reflectionRouteMin}`}
                   </p>
                 </div>
 
@@ -1399,20 +1471,21 @@ const Index = () => {
         <footer className="snap-start border-t border-yellow-300/15 bg-black/95 px-4 py-14 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-3xl space-y-5 text-center text-xs leading-relaxed text-yellow-100/50 sm:text-sm">
             <p>
-              This site and any wallet actions you take through it are provided for general information only. Nothing
-              here is an offer or solicitation to buy or sell any token, security, or financial instrument, and nothing
-              constitutes legal, tax, or investment advice. Digital assets are experimental, volatile, and may become
-              worthless. Past or described mechanics (including pegs, buybacks, or rewards) are not guarantees of future
-              behavior. Smart contracts and interfaces can contain bugs or change without notice.
+              This site is maintained by volunteers in the spirit of New Earth Finance: open tools for flex tokens on
+              XPR Network, not a bank, fund, or incorporated product. There is no traditional single owner of the chain,
+              contracts, or your keys—contributors donate time and infra; you choose every signature yourself.
             </p>
             <p>
-              By using this site you agree that you alone decide whether to interact with on-chain contracts, that you
-              understand the risks of total loss, and that the authors, contributors, and operators of this site disclaim
-              all warranties and all liability—including for indirect or consequential damages—to the fullest extent
-              permitted by law. You use this site and any linked services at your own risk.
+              Nothing here is an offer or solicitation, or legal, tax, or investment advice. Digital assets are
+              experimental and may become worthless. Described mechanics (rewards, burns, bridges, or pegs) are not
+              promises of future behavior. Smart contracts and interfaces can contain bugs or change without notice. By
+              using the site you accept full responsibility for your wallet actions; volunteers and hosts disclaim
+              warranties and liability—including for indirect or consequential damages—to the fullest extent permitted by
+              law.
             </p>
             <p className="text-yellow-100/40">
-              Built on XPR Network. Token mechanics can change; verify contract actions before high-value calls.
+              Built on XPR Network. Confirm accounts, amounts, and actions on a block explorer before high-value
+              transactions.
             </p>
           </div>
         </footer>
