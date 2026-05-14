@@ -10,24 +10,9 @@ export default defineConfig({
     hmr: {
       overlay: false,
     },
-    /** Storex API only allows Origin https://storex.io — proxy so the SPA can call Fireblocks routes same-origin. */
-    proxy: {
-      "/api/storex": {
-        target: "https://api.storex.io",
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api\/storex/, ""),
-      },
-    },
   },
   preview: {
     port: 8080,
-    proxy: {
-      "/api/storex": {
-        target: "https://api.storex.io",
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api\/storex/, ""),
-      },
-    },
   },
   plugins: [react()],
   resolve: {

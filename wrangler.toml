@@ -1,5 +1,3 @@
 name = "easy"
 compatibility_date = "2026-05-12"
 pages_build_output_dir = "./dist"
-# Pages deploy must be run from this repo root (not from inside ./dist alone) so
-# `functions/_middleware.ts` is picked up and `/api/storex/*` proxies to api.storex.io.
