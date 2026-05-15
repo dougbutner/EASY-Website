@@ -1,10 +1,11 @@
 /**
- * useProton — WebAuth (Proton SDK) + Anchor (WharfKit), multi-account, one active signer.
+ * useProton — XPR Network @proton/web-sdk (WebAuth app + Web + Anchor) + legacy Wharf Anchor restore.
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { LoadedWallet } from '@/services/walletSessions';
 import {
   restoreAllWallets,
+  connectNewXprWallet,
   connectNewWebAuthWallet,
   connectNewAnchorWallet,
   disconnectWallet,
@@ -83,6 +84,15 @@ export function useProton() {
     return w;
   }, []);
 
+  const addXprWallet = useCallback(async () => {
+    const w = await connectNewXprWallet();
+    if (!w) return null;
+    setWallets((prev) => [...prev, w]);
+    setActiveId(w.id);
+    setActiveWalletId(w.id);
+    return w;
+  }, []);
+
   const removeWallet = useCallback(
     async (id: string) => {
       const w = wallets.find((x) => x.id === id);
@@ -130,11 +140,12 @@ export function useProton() {
     setActive,
     addWebAuthWallet,
     addAnchorWallet,
+    addXprWallet,
     removeWallet,
     disconnectAll,
     transact: handleTransact,
     isLoggedIn: wallets.length > 0,
-    login: async () => addWebAuthWallet(),
+    login: async () => addXprWallet(),
     logout: async () => {
       if (activeWallet) await removeWallet(activeWallet.id);
     },

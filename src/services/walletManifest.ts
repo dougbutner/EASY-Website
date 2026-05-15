@@ -1,7 +1,7 @@
 /**
- * Persisted list of WebAuth connections only. Each entry uses a distinct storage prefix
- * so @proton/web-sdk keeps separate wallet-type / user-auth per account.
- * Anchor sessions are stored by WharfKit separately.
+ * Persisted list of @proton/web-sdk connections (WebAuth mobile/web + Anchor).
+ * Each entry uses a distinct storage prefix so sessions stay isolated.
+ * Legacy WharfKit Anchor sessions are stored separately by WharfKit.
  */
 import type { LinkStorage } from '@proton/link';
 
@@ -10,15 +10,18 @@ export const ACTIVE_WALLET_ID_KEY = 'xpr-forge-active-wallet-id';
 /** Default prefix used by older single-session @proton/web-sdk installs */
 export const LEGACY_STORAGE_PREFIX = 'proton-storage';
 
+/** Rows persisted from ConnectWallet (XPR Network proton-web-sdk). */
+export type ManifestProvider = 'proton-sdk';
+
 export interface WalletManifestEntry {
   id: string;
   storagePrefix: string;
   actor: string;
   permission: string;
   chainId: string;
-  /** Always `webauth` for rows in this manifest */
-  walletType: string;
-  provider: 'webauth';
+  /** From SDK storage `wallet-type`: mobile WebAuth, desktop WebAuth popup, or Anchor (ESR). */
+  walletType: 'proton' | 'webauth' | 'anchor';
+  provider: ManifestProvider;
 }
 
 /** Same key layout as @proton/web-sdk Storage */
@@ -50,12 +53,20 @@ export function loadManifest(): WalletManifestEntry[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(isManifestEntry).map((e) => ({
       ...e,
-      provider: 'webauth' as const,
-      walletType: e.walletType || 'webauth',
+      provider: 'proton-sdk',
+      walletType: normalizeWalletType(
+        typeof e.walletType === 'string' ? e.walletType : 'webauth'
+      ),
     }));
   } catch {
     return [];
   }
+}
+
+function normalizeWalletType(wt: string): WalletManifestEntry['walletType'] {
+  const t = wt.toLowerCase();
+  if (t === 'proton' || t === 'webauth' || t === 'anchor') return t;
+  return 'webauth';
 }
 
 export function saveManifest(entries: WalletManifestEntry[]): void {
@@ -69,36 +80,6 @@ export function getActiveWalletId(): string | null {
 export function setActiveWalletId(id: string | null): void {
   if (id === null) localStorage.removeItem(ACTIVE_WALLET_ID_KEY);
   else localStorage.setItem(ACTIVE_WALLET_ID_KEY, id);
-}
-
-/**
- * Remove Proton-Link "anchor" rows (superseded by WharfKit). Clear their storage keys.
- * Reads raw JSON so anchor rows are not dropped before this runs.
- */
-export function stripProtonAnchorFromManifest(): void {
-  const raw = localStorage.getItem(MANIFEST_KEY);
-  if (!raw) return;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return;
-  }
-  if (!Array.isArray(parsed)) return;
-  const kept: unknown[] = [];
-  let changed = false;
-  for (const row of parsed) {
-    if (!row || typeof row !== 'object') continue;
-    const o = row as Record<string, unknown>;
-    const wt = typeof o.walletType === 'string' ? o.walletType.toLowerCase() : '';
-    if (wt === 'anchor') {
-      if (typeof o.storagePrefix === 'string') clearAllKeysForPrefix(o.storagePrefix);
-      changed = true;
-      continue;
-    }
-    kept.push(row);
-  }
-  if (changed) localStorage.setItem(MANIFEST_KEY, JSON.stringify(kept));
 }
 
 /** If manifest is empty but legacy proton-storage keys exist, seed one WebAuth entry. */
@@ -128,8 +109,8 @@ export function migrateLegacyManifestIfNeeded(): void {
       actor,
       permission,
       chainId: '',
-      walletType: 'webauth',
-      provider: 'webauth',
+      walletType: normalizeWalletType(walletType),
+      provider: 'proton-sdk',
     },
   ]);
 }
@@ -144,19 +125,21 @@ export function clearAllKeysForPrefix(prefix: string): void {
   for (const k of toRemove) localStorage.removeItem(k);
 }
 
-function isManifestEntry(x: unknown): x is Omit<WalletManifestEntry, 'provider'> & { provider?: string } {
+function isManifestEntry(x: unknown): x is Omit<WalletManifestEntry, 'provider' | 'walletType'> & {
+  provider?: string;
+  walletType?: string;
+} {
   if (!x || typeof x !== 'object') return false;
   const o = x as Record<string, unknown>;
   const provider = o.provider;
-  const walletType = typeof o.walletType === 'string' ? o.walletType.toLowerCase() : '';
-  if (walletType === 'anchor') return false;
-  if (provider !== undefined && provider !== 'webauth') return false;
+  if (provider !== undefined && provider !== 'proton-sdk' && provider !== 'webauth') return false;
+  const wt = typeof o.walletType === 'string' ? o.walletType.toLowerCase() : '';
+  if (wt && wt !== 'proton' && wt !== 'webauth' && wt !== 'anchor') return false;
   return (
     typeof o.id === 'string' &&
     typeof o.storagePrefix === 'string' &&
     typeof o.actor === 'string' &&
     typeof o.permission === 'string' &&
-    typeof o.chainId === 'string' &&
-    typeof o.walletType === 'string'
+    typeof o.chainId === 'string'
   );
 }

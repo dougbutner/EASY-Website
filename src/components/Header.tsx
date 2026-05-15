@@ -1,5 +1,5 @@
 /**
- * Header — EASY brand navigation and multi-account wallet menu (WebAuth + Anchor).
+ * Header — EASY brand navigation and multi-account wallet menu (XPR proton-web-sdk + legacy Anchor).
  */
 import { Button } from '@/components/ui/button';
 import {
@@ -31,6 +31,8 @@ interface HeaderProps {
   loading: boolean;
   wallets: LoadedWallet[];
   activeId: string | null;
+  /** Official XPR selector: WebAuth (app) + WebAuth (web) + Anchor. */
+  onConnectWallet: () => Promise<unknown>;
   onAddWebAuth: () => Promise<unknown>;
   onAddAnchor: () => Promise<unknown>;
   onSetActive: (id: string) => void;
@@ -50,6 +52,7 @@ export function Header({
   loading,
   wallets,
   activeId,
+  onConnectWallet,
   onAddWebAuth,
   onAddAnchor,
   onSetActive,
@@ -208,7 +211,7 @@ export function Header({
                           />
                           <div className="min-w-0 flex-1">
                             <div className="truncate font-medium">
-                              {w.provider === 'webauth' ? w.auth.actor : w.actor}
+                              {w.provider === 'proton-sdk' ? w.auth.actor : w.actor}
                             </div>
                             <div
                               className={cn(
@@ -262,24 +265,16 @@ export function Header({
           ) : (
             <div className="flex items-center justify-end gap-2">
               <Button
-                onClick={() => void onAddWebAuth()}
+                onClick={() => void onConnectWallet()}
                 disabled={loading}
                 size="sm"
                 variant="default"
                 className="gap-2 bg-yellow-300 text-black hover:bg-yellow-200"
               >
                 <LogIn className="h-4 w-4" />
-                <span className="hidden sm:inline">{loading ? 'Restoring...' : 'WebAuth'}</span>
-              </Button>
-              <Button
-                onClick={() => void onAddAnchor()}
-                disabled={loading}
-                size="sm"
-                variant="outline"
-                className="gap-2 border-yellow-400/30 bg-black/60 text-yellow-100 hover:bg-yellow-300 hover:text-black"
-              >
-                <Anchor className="h-4 w-4" />
-                <span className="hidden sm:inline">Anchor</span>
+                <span className="hidden sm:inline">
+                  {loading ? 'Restoring...' : 'Connect wallet'}
+                </span>
               </Button>
             </div>
           )}

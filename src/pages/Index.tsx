@@ -39,7 +39,7 @@ import {
   submitEasySolanaWithdrawal,
 } from '@/services/storexBridge';
 import { fetchBridgeEasySnapshot, type BridgeEasySnapshot } from '@/services/easyBalance';
-import { signUnbroadcastWebAuthTransaction } from '@/services/walletSessions';
+import { signUnbroadcastWebAuthTransaction, isStorexWebAuthSigner } from '@/services/walletSessions';
 import {
   ExternalLink,
   Globe2,
@@ -189,7 +189,7 @@ const tokens: TokenConfig[] = [
       <>
         MEME is totally for fun and used to reward{' '}
         <a
-          href="https://proton.alcor.exchange/farm"
+          href="https://alcor.exchange/v/xpr/farm"
           target="_blank"
           rel="noopener noreferrer"
           className="font-medium text-yellow-200/90 underline underline-offset-2 hover:text-yellow-50"
@@ -240,11 +240,11 @@ const featureCards = [
   },
 ];
 
-/** Open Alcor / terminal use routed `alcor.exchange/v/xpr/...`; swap iframe uses `proton.alcor.exchange` for reliable token loading. */
+/** Alcor XPR web UI: `https://alcor.exchange/v/xpr/...` (swap, swap-widget, terminal, farm). */
 const alcorEasyTerminal = 'https://alcor.exchange/v/xpr/terminal/easy-mon3y';
 const alcorEasySwap = 'https://alcor.exchange/v/xpr/swap?input=XUSDC-xtokens&output=EASY-mon3y';
 const alcorEasySpotTrade = 'https://alcor.exchange/v/xpr/trade/easy-mon3y_xusdc-xtokens';
-const alcorEasySwapWidget = 'https://proton.alcor.exchange/swap-widget?input=XUSDC-xtokens&output=EASY-mon3y';
+const alcorEasySwapWidget = 'https://alcor.exchange/v/xpr/swap-widget?input=XUSDC-xtokens&output=EASY-mon3y';
 const fractalWhitePaperUrl = 'https://fractally.com/uploads/Fractally%20White%20Paper%201.0.pdf';
 const contributorsClubCalendarUrl =
   'https://calendar.google.com/calendar/u/0/r/eventedit?text=Contributors+Club&dates=20260127T170000Z/20260127T180000Z&details=Share+your+contributions+to+EASY+and+WON+in+3-5+minutes+and+rank+others+to+distribute+shares.+www.flex.town.%0A%0AAlways+5PM+UTC%0AReal+Link:+https://meet.google.com/dqq-yian-hch&location=https://meet.google.com/dqq-yian-hch&recur=RRULE:FREQ%3DWEEKLY;INTERVAL%3D2;BYDAY%3DTU';
@@ -398,7 +398,6 @@ function FlexTownStoryRotator() {
 }
 
 const EASY_WHAT_STORY_PARAGRAPHS = [
-  'Buy EASY and stack more EASY forever.',
   'EASY is a New Earth mon3y experiment, a token on XPR Network that sends you more EASY over time.',
   "We're testing Gresham's law against USD where holding individual stablecoins becomes bad money compared to the more-liquid EASY, driving industry-trusted stablecoins into 5 xtokens pools for USDC, USDT, XMD, Paxos Dollar, PYUSD, each paired with 4.20M EASY at day 1.",
   'The price range was set from One Penny to 100k USD(c) for a logical and lucrative absorption of stables.',
@@ -465,6 +464,7 @@ const Index = () => {
     activeId,
     addWebAuthWallet,
     addAnchorWallet,
+    addXprWallet,
     setActive,
     removeWallet,
     disconnectAll,
@@ -544,15 +544,50 @@ const Index = () => {
         return;
       }
       setPoolsByContract((prev) => ({ ...prev, [selectedToken.contract]: rows }));
-      const first = rows[0]!;
-      setSelectedPoolRowId(String(first.id));
-      setRewardSymbol(flexPoolRewardSymbol(first));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load flex pools.');
     } finally {
       setLoadingPools(false);
     }
   };
+
+  /** Public chain read: prefetch flex pool rows for every flex token so reward options work without a wallet. */
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        tokens.map(async (t) => {
+          try {
+            const rows = await fetchFlexPools(t.contract);
+            return [t.contract, rows] as const;
+          } catch {
+            return [t.contract, [] as FlexPoolRow[]] as const;
+          }
+        })
+      );
+      if (cancelled) return;
+      setPoolsByContract((prev) => {
+        const next = { ...prev };
+        for (const [contract, rows] of entries) {
+          if (rows.length) next[contract] = rows;
+        }
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** When on-chain pools arrive and nothing is selected yet, default to the first pool for the current contract. */
+  useEffect(() => {
+    const rows = poolsByContract[selectedToken.contract] ?? [];
+    if (!rows.length || selectedPoolRowId !== null) return;
+    const first = rows[0];
+    if (!first) return;
+    setSelectedPoolRowId(String(first.id));
+    setRewardSymbol(flexPoolRewardSymbol(first));
+  }, [poolsByContract, selectedToken.contract, selectedPoolRowId]);
 
   useEffect(() => {
     const root = mainRef.current;
@@ -753,7 +788,7 @@ const Index = () => {
       toast.error('Connect a WebAuth wallet first.');
       return;
     }
-    if (activeWallet.provider !== 'webauth') {
+    if (!isStorexWebAuthSigner(activeWallet)) {
       toast.error('Switch to WebAuth in the header to sign this bridge.');
       return;
     }
@@ -824,6 +859,7 @@ const Index = () => {
         loading={loading}
         wallets={wallets}
         activeId={activeId}
+        onConnectWallet={addXprWallet}
         onAddWebAuth={addWebAuthWallet}
         onAddAnchor={addAnchorWallet}
         onSetActive={setActive}
@@ -1022,8 +1058,8 @@ const Index = () => {
                           </Select>
                         ) : (
                           <p className="rounded-md border border-yellow-300/15 bg-black/50 px-3 py-2 text-sm text-yellow-100/55">
-                            Tap &quot;Load Available&quot; to fetch on-chain flex pools for {selectedToken.contract},
-                            then choose a reward route.
+                            Flex pool list loads from chain automatically; use &quot;Load Available&quot; to refresh
+                            for {selectedToken.contract} if needed.
                           </p>
                         )}
                       </div>
@@ -1034,10 +1070,9 @@ const Index = () => {
                           else void loadFlexPools();
                         }}
                         disabled={
-                          !isLoggedIn ||
                           submitting !== null ||
                           loadingPools ||
-                          (poolsLoaded && !selectedPoolRowId)
+                          (poolsLoaded && (!isLoggedIn || !selectedPoolRowId))
                         }
                         className="self-end bg-yellow-300 text-black hover:bg-yellow-200"
                       >
@@ -1337,7 +1372,7 @@ const Index = () => {
                   <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-80" />
                 </a>
                 <a
-                  href={`https://proton.alcor.exchange/swap?input=XUSDC-xtokens&output=${token.dexToken}`}
+                  href={`https://alcor.exchange/v/xpr/swap?input=XUSDC-xtokens&output=${token.dexToken}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-3 inline-flex items-center justify-center rounded-full border border-yellow-300/25 px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-yellow-200 hover:bg-yellow-300 hover:text-black"
@@ -1383,7 +1418,7 @@ const Index = () => {
                 <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-80" />
               </a>
               <a
-                href="https://proton.alcor.exchange/swap?input=XUSDC-xtokens&output=HARD-simpletoken"
+                href="https://alcor.exchange/v/xpr/swap?input=XUSDC-xtokens&output=HARD-simpletoken"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-3 inline-flex items-center justify-center rounded-full border border-yellow-300/25 px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-yellow-200 hover:bg-yellow-300 hover:text-black"
@@ -1421,7 +1456,7 @@ const Index = () => {
                 <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-80" />
               </a>
               <a
-                href="https://proton.alcor.exchange/swap?input=XUSDC-xtokens&output=INDEX-xfund"
+                href="https://alcor.exchange/v/xpr/swap?input=XUSDC-xtokens&output=INDEX-xfund"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-3 inline-flex items-center justify-center rounded-full border border-yellow-300/25 px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-yellow-200 hover:bg-yellow-300 hover:text-black"

@@ -1,5 +1,6 @@
 /**
- * WharfKit SessionKit for Anchor only — default WebRenderer UI, no custom modals.
+ * WharfKit SessionKit — legacy Anchor sessions only (restore + disconnect).
+ * New Anchor connections use @proton/web-sdk in walletSessions.
  */
 import type { AnyAction } from '@wharfkit/antelope';
 import { Checksum256 } from '@wharfkit/antelope';
