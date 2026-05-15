@@ -1,12 +1,19 @@
 /**
- * WebAuth: @proton/web-sdk (walletType forced to webauth).
+ * WebAuth: @proton/web-sdk v5 (XPR Network). Side-effect import keeps Proton Link (mobile / deep link) in the bundle.
  * Anchor: WharfKit SessionKit (default WebRenderer).
  */
-import ConnectWallet from '@proton/web-sdk';
+import '@proton/link';
+import ConnectWallet, { type ConnectWalletRet } from '@proton/web-sdk';
 import type { Session } from '@wharfkit/session';
 import type { ProtonSession } from './proton';
 import { transact as protonTransact } from './proton';
-import { APP_NAME, REQUEST_ACCOUNT, CHAIN_ENDPOINTS } from './walletConstants';
+import {
+  APP_NAME,
+  APP_LOGO_PUBLIC_PATH,
+  REQUEST_ACCOUNT,
+  CHAIN_ENDPOINTS,
+  XPR_CHAIN_ID_HEX,
+} from './walletConstants';
 import {
   loadManifest,
   saveManifest,
@@ -58,38 +65,50 @@ async function connectWebAuthWallet(options: {
   storage: PrefixLinkStorage;
   restoreSession: boolean;
 }): Promise<ProtonSession | null> {
-  const res = (await ConnectWallet({
+  const appLogo =
+    typeof window !== 'undefined'
+      ? new URL(APP_LOGO_PUBLIC_PATH, window.location.origin).href
+      : undefined;
+
+  const res: ConnectWalletRet = await ConnectWallet({
     linkOptions: {
       endpoints: CHAIN_ENDPOINTS,
+      chainId: XPR_CHAIN_ID_HEX,
       storage: options.storage,
       restoreSession: options.restoreSession,
     },
     transportOptions: {
       requestAccount: REQUEST_ACCOUNT,
+      walletType: 'webauth',
     },
     selectorOptions: {
-      appName: APP_NAME,
       walletType: 'webauth',
-    } as Record<string, unknown>,
-  })) as {
-    link?: unknown;
-    session?: { auth: { actor: string; permission: string }; chainId?: unknown };
-    error?: unknown;
-  };
+      enabledWalletTypes: ['webauth'],
+    },
+    uiOptions: {
+      theme: 'dark',
+      appInfo: {
+        name: APP_NAME,
+        ...(appLogo ? { logo: appLogo, logoRounded: true } : {}),
+      },
+    },
+  });
 
-  if (res?.error) {
+  if (res.error) {
     console.error('ConnectWallet error:', res.error);
     return null;
   }
-  if (!res?.session || !res.link) return null;
+  if (!res.session || !res.link) return null;
+
+  const { session, link } = res;
 
   return {
     auth: {
-      actor: String(res.session.auth.actor),
-      permission: String(res.session.auth.permission),
+      actor: String(session.auth.actor),
+      permission: String(session.auth.permission),
     },
-    link: res.link,
-    session: res.session,
+    link,
+    session,
   };
 }
 
