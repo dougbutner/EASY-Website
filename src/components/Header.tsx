@@ -21,6 +21,8 @@ import { cn } from '@/lib/utils';
 interface HeaderNavItem {
   id: string;
   label: string;
+  /** Hide this nav control below `md` (use when the target section is desktop-only). */
+  hideBelowMd?: boolean;
 }
 
 interface HeaderProps {
@@ -108,7 +110,13 @@ export function Header({
               const active = item.id === activeSection;
               const showPendingRefresh = item.id === 'flex-tools' && onRefreshPendingBalance;
               return (
-                <div key={item.id} className="flex shrink-0 items-center gap-0.5">
+                <div
+                  key={item.id}
+                  className={cn(
+                    'flex shrink-0 items-center gap-0.5',
+                    item.hideBelowMd && 'hidden md:flex'
+                  )}
+                >
                   <button
                     type="button"
                     data-section-id={item.id}

@@ -113,7 +113,7 @@ const navItems = [
   { id: 'flex-tools', label: 'Flex Tools' },
   { id: 'what', label: 'What Is EASY' },
   { id: 'money', label: 'Finance' },
-  { id: 'price', label: 'Trade' },
+  { id: 'price', label: 'Trade', hideBelowMd: true },
   { id: 'swap', label: 'Swap' },
   { id: 'works', label: 'How It Works' },
   { id: 'tokens', label: 'Core Flex' },
@@ -127,9 +127,9 @@ const tokens: TokenConfig[] = [
     symbol: 'EASY',
     contract: 'mon3y',
     title: 'Take it EASY 🍹',
-    tagline: 'The blue-chip flex—pure liquid reflections on Alcor.',
+    tagline: 'The blue-chip flex—Pure-liquid reflections on Alcor.',
     summary:
-      "The blue-chip flex, EASY delivers more reflections and is pure liquid for stables. Gresham's law unfolding, we do more volume on Alcor than USDC.",
+      "The blue-chip flex, EASY delivers reflections and is pure liquid for stables. Gresham's law unfolding, we do more volume on Alcor than USDC.",
     tax: '2% reflection',
     minHold: '100+ EASY',
     dexToken: 'EASY-mon3y',
@@ -147,7 +147,7 @@ const tokens: TokenConfig[] = [
     title: 'We WON ⓦ',
     tagline: 'Rotating default reflection for New Earth—sponsor projects, gift tokens.',
     summary:
-      'WON uses a changing default reflection token to benefit New Earth through giving you tokens from new projects. Currently reflects EASY until we have a project to sponsor.',
+      'WON uses a changing default reflection token to benefit New Earth by giving you tokens from new projects. Currently reflects EASY until we have a project to sponsor.',
     tax: '2.2% reflection + 0.8% team',
     minHold: '1+ WON',
     dexToken: 'WON-w3won',
@@ -166,7 +166,7 @@ const tokens: TokenConfig[] = [
     title: 'Golden GRAMS',
     tagline: 'Generational gold—inheritance to any account, reflects XPAXG.',
     summary:
-      'Generational wealth stored in gold. Grandchildren-approved with inheritance functionality to any other account. Pure liquid for Paxos Gold, GRAMS reflects XPAXG by default.',
+      'Generational wealth stored in gold. Grandchildren-approved, with inheritance functionality for any account. Pure liquid for Paxos Gold, GRAMS reflects XPAXG by default.',
     tax: '1.1% reflection + 0.11% team',
     minHold: '0.1 GRAMS',
     dexToken: 'GRAMS-gold.mon3y',
@@ -196,7 +196,7 @@ const tokens: TokenConfig[] = [
         >
           farms
         </a>{' '}
-        {` on XPR. Not pure liquid, not backed, good 'ol fashion slow-burn meme token to rule all meme tokens.`}
+        {` on XPR. Not pure liquid, not backed, good ol' fashioned slow-burn meme token to rule all meme tokens.`}
       </>
     ),
     tax: '1% reflection + 1% burn',
@@ -226,17 +226,17 @@ const featureCards = [
   {
     image: TOKEN_LOGO.EASY,
     title: 'Send It',
-    body: 'Splash mon3y in the reflection pool on kin, your click sends pending rewards to holders.',
+    body: 'Splash mon3y in the reflection pool on kin, your click sends pending rewards to all holders.',
   },
   {
     image: TOKEN_LOGO.GRAMS,
     title: 'Flex your Reward Token',
-    body: 'Choose your rewards: Let EASY compound or stack OG blue chips like XBTC, XXRP, METAL. Holders of WON and GRAMS can pass on % of rewards to any account, with custom memo feature.',
+    body: 'Choose your rewards: let EASY compound or stack OG blue chips like XBTC, XXRP, METAL. Holders of WON and GRAMS can pass on % of rewards to any account, with a custom memo feature.',
   },
   {
     image: TOKEN_LOGO.MEME,
     title: 'Taxes: Optional in the New Earth',
-    body: 'The fee is optional, but turning it off turns off your rewards - forever.',
+    body: 'The fee is optional, but turning it off disables your rewards forever.',
   },
 ];
 
@@ -260,10 +260,10 @@ const howItWorksSteps: { step: string; title: string; body: ReactNode }[] = [
     title: 'Ranged liquidity day 0',
     body: (
       <>
-        Pump and dump market mechanics come from pricing initial market cap too low, dangerous due to outstanding supply
-        valued multiples higher than when it was removed in the pool. We ranged EASY starting at 210K, one shiny penny,
+        Pump and dump market mechanics come from pricing the initial market cap too low, dangerous due to outstanding supply
+        valued multiples higher than when it was added to the pool. We ranged EASY starting at a 210K market cap, one shiny penny,
         maxing out at a 2.1T market cap, 100K. This magic range allows initial buys to be a gift but not a steal,
-        keeping enough allocated EASY for reliable mon3y supply to BTC-level prices. Pure liquid tokens: EASY (for
+        keeping enough allocated EASY for a reliable mon3y supply to BTC-level prices. Pure liquid tokens: EASY (for
         USDish) WON (for EASY), and GRAMS (for XPAXG)
       </>
     ),
@@ -273,8 +273,8 @@ const howItWorksSteps: { step: string; title: string; body: ReactNode }[] = [
     title: 'Abundance in Arbitrage',
     body: (
       <>
-        Price differences of Alcor to Metal DEX are always eaten by bots when EASY is pooled with the assets. Bots
-        trigger trades and pay the transfer fees we pass to the holders, themselves also profiting, but often much less
+        Price differences between Alcor and Metal DEX are always eaten by bots when EASY is pooled with the assets. Bots
+        trigger trades and pay transfer fees that we pass to holders, themselves also profiting, but often much less
         than we do.
         <span className="mt-3 block">
           Reliable volume from the outside crypto world enables liquidity provision as a healthy side hustle with wider
@@ -289,9 +289,9 @@ const howItWorksSteps: { step: string; title: string; body: ReactNode }[] = [
     title: 'Reflection pool',
     body: (
       <>
-        Watch the tax accumulate on-chain until someone musters a clicks to send it. Technically called Reflection Pool
-        on the contract, it&apos;s where the tokens collect before being splashed to wallets. There&apos;s also a burn
-        pool on all and project pool for WON and GRAMS, but only MEME uses the burn pool.
+        Watch the tax accumulate on-chain until someone musters a click to send it. Technically called Reflection Pool
+        on the contract, it&apos;s where tokens collect before being splashed to wallets. There&apos;s also a burn
+        pool on all tokens and a project pool for WON and GRAMS, but only MEME uses the burn pool.
       </>
     ),
   },
@@ -309,11 +309,11 @@ const howItWorksSteps: { step: string; title: string; body: ReactNode }[] = [
         >
           meet
         </a>{' '}
-        every 2 weeks to present + celebrate what we&apos;ve done for Flex tokens in a{' '}
+        every 2 weeks to present + celebrate what we&apos;ve done for Flex tokens through a{' '}
         <a href={fractalWhitePaperUrl} target="_blank" rel="noopener noreferrer" className={inlineLinkClass}>
           fractal
         </a>{' '}
-        process, check flex charts, and gossip the latest on EASY, XPR, crypto. EASY served top 3 consensus-chosen
+        process, check flex charts, and gossip the latest on EASY, XPR, crypto. EASY is served to the top 3 consensus-chosen
         winners.{' '}
         <a
           href={contributorsClubCalendarUrl}
@@ -345,7 +345,7 @@ function tokenLogoUrl(token: TokenConfig, wonRandom: string): string {
 const FLEX_TOWN_STORY_PARAGRAPHS = [
   'Flex tokens charge a transfer fee to distribute back to holders as flexible rewards they choose, EASY 2%, GRAMS 1.1% reflection + 0.11% team, WON 3% and MEME 2%.',
   'Choose your Flex token, set your rewards, or let it compound.',
-  'MEME offered burns and reflection, and EASY learned that we needed real tokens backing to maintain price.',
+  'MEME offered burns and reflections, and EASY learned that we needed real tokens backing to maintain price.',
   'EASY became the star as the first pure liquid Flex token, surpassing all other community alts on XPR by swap volume.',
   'WON expanded the tech to custom memos and beneficiaries pure liquid, and brought the focus to building the New Earth in real life tokenizing one project at a time.',
   'GRAMS kept the tech improvements with a chain-wide gilding quest, pure liquid gold reflecting Paxos gold.',
@@ -404,7 +404,7 @@ const EASY_WHAT_STORY_PARAGRAPHS = [
   'The price range was set from One Penny to 100k USD(c) for a logical and lucrative absorption of stables.',
   'This makes EASY a better token to LP with, and because it holds liquid stables, it increases volume in the entire ecosystem.',
   'Our ecosystem of bi-weekly meetings democratically rewards contributors is funded by a protocol fee each reflection paid from the rewards pool, not individuals.',
-  'Price historically increased; never 2 consecutive negative months or 4 negative consecutive weeks, a strong historic growth partially from constant buybacks with LP pool fees.',
+  'The price has historically increased, with never 2 consecutive negative months or 4 consecutive negative weeks, a strong historic growth partially from constant buybacks from LP pool fees.',
   "We serve a unique purpose, not to make money for people, but to fix mon3y for people. We hope you enjoy EASY and feel proud to take part in a new type of mon3y, one where the people are rewarded from the entire financial system's activity.",
   'Because the supply is the same as BTC, this makes EASY a merger of the spirit of Bitcoin and the stability of stables.',
   'Mining becomes market making, as when anyone acquires EASY, it came from funds that are now a part of the 5 stablecoin pools.',
@@ -840,7 +840,7 @@ const Index = () => {
         ref={mainRef}
         className="h-screen overflow-y-auto scroll-smooth snap-y snap-mandatory bg-[radial-gradient(circle_at_top_left,rgba(250,204,21,0.2),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(234,179,8,0.12),transparent_32%),#020202]"
       >
-        <SnapSection id="tools" eyebrow="Flex town" title="New Earth finance for the EASY life 🍹">
+        <SnapSection id="tools" eyebrow="Flex town" title="New Earth Finance for the EASY life 🍹">
           <div className="w-full max-w-7xl space-y-5">
             <FlexTownStoryRotator />
             <div className="grid gap-3 sm:grid-cols-3">
@@ -1022,7 +1022,7 @@ const Index = () => {
                           </Select>
                         ) : (
                           <p className="rounded-md border border-yellow-300/15 bg-black/50 px-3 py-2 text-sm text-yellow-100/55">
-                            Tap &quot;Load available&quot; to fetch on-chain flex pools for {selectedToken.contract},
+                            Tap &quot;Load Available&quot; to fetch on-chain flex pools for {selectedToken.contract},
                             then choose a reward route.
                           </p>
                         )}
@@ -1045,7 +1045,7 @@ const Index = () => {
                           ? 'Loading...'
                           : poolsLoaded
                             ? 'Update'
-                            : 'Load available'}
+                            : 'Load Available'}
                       </Button>
                     </div>
                   </div>
@@ -1180,7 +1180,7 @@ const Index = () => {
               </div>
               <h3 className="mt-8 text-4xl font-black text-yellow-50">Take it EASY 🍹.</h3>
               <p className="mt-4 text-yellow-100/65">
-                Read in-depth about the tokens, smart contracts, contributors club in our Flex Report, basically a
+                Read in-depth about the tokens, smart contracts, and Contributors Club in our Flex Report, basically a
                 white paper.
               </p>
               <a
@@ -1202,17 +1202,17 @@ const Index = () => {
                 icon: Globe2,
                 title: 'True Liquid Economies',
                 body:
-                  '100% of supply for GRAMS, WON, and EASY "vaulted" into liquidity pools, meaning all tokens out of the pool tokens were paid for and gained backing at the time they were bought. All Distributions aren\'t random inflation, they are from the transfer fee.',
+                  '100% of supply for GRAMS, WON, and EASY "vaulted" into liquidity pools, meaning all tokens out of the pool tokens were paid for and gained backing at the time they were bought. All distributions aren\'t random inflation, they are from the transfer fee.',
               },
               {
                 icon: Sprout,
                 title: 'Reflexive Rewards',
-                body: 'The first tokens to allow each person to pick a separate reward token, and to allow beneficiaries of the reward for WON and GRAMS.',
+                body: 'The first tokens to allow each person to pick a separate reward token and designate beneficiaries for those rewards on WON and GRAMS.',
               },
               {
                 icon: Network,
                 title: 'Complete Economy',
-                body: 'Flex tokens work together, and cover different areas, from stables, to gold, to alts. They offer rewards in each other, and connect to the wider crypto economy by providing liquidity in markets with wrapped assets like XBTC.',
+                body: 'Flex tokens work together, and cover different areas, from stables to gold to alts. They offer rewards in each other, and connect to the wider crypto economy by providing liquidity in markets with wrapped assets like XBTC.',
               },
             ].map((item) => (
               <GlassCard key={item.title} className="min-h-72 p-7">
@@ -1224,7 +1224,7 @@ const Index = () => {
           </div>
         </SnapSection>
 
-        <SnapSection id="price" eyebrow="EASY / XUSDC" title="Trade on Alcor">
+        <SnapSection id="price" eyebrow="EASY / XUSDC" title="Trade on Alcor" className="hidden md:flex">
           <div className="flex w-full max-w-6xl flex-col gap-5">
             <p className="text-base leading-relaxed text-yellow-100/70">
               See live trades, know the top holders, check prices, and buy in from{' '}
@@ -1236,7 +1236,7 @@ const Index = () => {
               >
                 Alcor
               </a>
-              . Search in middle right. Open token analytics for{' '}
+              . Search in the middle-right. Open token analytics for{' '}
               {tokens.map((token, i) => (
                 <span key={token.symbol}>
                   {i > 0 ? ' ' : null}
@@ -1268,7 +1268,7 @@ const Index = () => {
             <div className="space-y-5">
               <TokenThumb src={TOKEN_LOGO.EASY} alt="EASY" className="h-14 w-14 rounded-2xl" />
               <p className="text-xl leading-9 text-yellow-100/75">
-                The best way to get EASY is to swap with a stablecoin, max $500 at a time to avoid slippage.
+                The best way to get EASY is to swap with a stablecoin, maximum $500 at a time to avoid slippage.
               </p>
               <a
                 href={alcorEasySwap}
@@ -1352,7 +1352,7 @@ const Index = () => {
         <SnapSection id="fringe" eyebrow="Beyond core" title="Fringe Flex Tokens">
           <div className="w-full max-w-7xl space-y-6">
             <p className="max-w-3xl text-lg leading-8 text-yellow-100/70">
-              Fringe flex tokens created by volunteers that don't even flex
+              Fringe flex tokens created by volunteers that don't even flex.
             </p>
             <div className="grid gap-4 md:grid-cols-2">
             <GlassCard className="flex min-h-72 flex-col p-6">
@@ -1408,8 +1408,8 @@ const Index = () => {
               <h3 className="mt-6 text-4xl font-black text-yellow-50">INDEX</h3>
               <p className="mt-2 text-sm font-bold uppercase tracking-[0.14em] text-yellow-200/90">INDEX@xfund</p>
               <p className="mt-4 flex-1 leading-7 text-yellow-100/65">
-                INDEX uses smart-contract buy orders to attempt a 1000:1 soft peg to XPR (currently failing). No flex
-                mechanics. INDEX uses pool fees earned to buy back on spot markets, aiming to repeg to 1000:1 XPR.
+                INDEX uses smart-contract buy orders to attempt a 1000:1 soft peg to XPR (currently struggling). No flex
+                mechanics. INDEX uses earned pool fees to buy back on spot markets, aiming to repeg to 1000:1 XPR.
               </p>
               <a
                 href="https://alcor.exchange/v/xpr/analytics/tokens/index-xfund"
@@ -1438,7 +1438,7 @@ const Index = () => {
             <div className="space-y-5">
               <TokenThumb src={TOKEN_LOGO.EASY} alt="EASY" className="h-16 w-16 rounded-2xl" />
               <p className="text-xl leading-9 text-yellow-100/75">
-                Official EASY on Solana:{' '}
+                Official EASY token on Solana:{' '}
                 <a
                   href={`https://orbmarkets.io/token/${EASY_SOLANA_MINT}`}
                   target="_blank"
@@ -1452,8 +1452,8 @@ const Index = () => {
               <GlassCard className="space-y-4 p-6">
                 <h3 className="text-2xl font-black text-yellow-50">Important Solana note</h3>
                 <p className="leading-7 text-yellow-100/65">
-                  Flex reflections happen on XPR Network only. EASY held on Solana does not receive reflections, and 2%
-                  fee is used to LP. Bridge to and from XPR Network on this site.
+                  Flex reflections happen on XPR Network only. EASY held on Solana does not receive reflections, and the 2%
+                  fee is used for LP. Bridge to and from XPR Network on this site.
                 </p>
               </GlassCard>
               <a
@@ -1480,7 +1480,7 @@ const Index = () => {
                   <div>
                     <h3 className="text-2xl font-black text-yellow-50">From EASY on Solana</h3>
                     <p className="mt-2 leading-7 text-yellow-100/65">
-                      You send EASY on Solana into your personal receive address. It arrives as EASY on your XPR
+                      You send EASY on Solana to your personal receive address. It arrives as EASY in your XPR
                       account.
                     </p>
                   </div>
@@ -1527,7 +1527,7 @@ const Index = () => {
               <div className="rounded-[2rem] border border-yellow-300/15 bg-black/55 p-5">
                 <h3 className="text-2xl font-black text-yellow-50">To EASY on Solana</h3>
                 <p className="mt-2 leading-7 text-yellow-100/65">
-                  You send EASY from XPR. It lands as EASY on Solana in the wallet you choose below.
+                  You send EASY from your XPR account. It lands as EASY on Solana in the wallet you choose below.
                 </p>
 
                 <div className="mt-5 grid gap-4">
@@ -1621,13 +1621,13 @@ const Index = () => {
             <p>
               This site is maintained by volunteers in the spirit of New Earth Finance: open tools for flex tokens on
               XPR Network, not a bank, fund, or incorporated product. There is no traditional single owner of the chain,
-              contracts, or your keys—contributors donate time and infra; you choose every signature yourself.
+              contracts, or your keys. Contributors donate time and infrastructure; you choose every signature yourself.
             </p>
             <p>
-              Nothing here is an offer or solicitation, or legal, tax, or investment advice. Digital assets are
-              experimental and may become worthless. Described mechanics (rewards, burns, bridges, or pegs) are not
+              Nothing here is an offer, solicitation, or legal, tax, or investment advice. Digital assets are
+              experimental and may lose all value. Described mechanics (rewards, burns, bridges or pegs) are not
               promises of future behavior. Smart contracts and interfaces can contain bugs or change without notice. By
-              using the site you accept full responsibility for your wallet actions; volunteers and hosts disclaim
+              using the site you accept full responsibility for your wallet actions; volunteers and hosts disclaim all
               warranties and liability—including for indirect or consequential damages—to the fullest extent permitted by
               law.
             </p>
@@ -1659,16 +1659,21 @@ function SnapSection({
   eyebrow,
   title,
   children,
+  className,
 }: {
   id: string;
   eyebrow: string;
   title: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <section
       id={id}
-      className="relative flex min-h-screen snap-start flex-col items-center justify-center overflow-hidden px-4 pb-12 pt-28 sm:px-6 lg:px-8"
+      className={cn(
+        'relative flex min-h-screen snap-start flex-col items-center justify-center overflow-hidden px-4 pb-12 pt-28 sm:px-6 lg:px-8',
+        className
+      )}
     >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(250,204,21,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(250,204,21,0.04)_1px,transparent_1px)] bg-[size:72px_72px]" />
       <div className="relative z-10 mb-8 w-full max-w-7xl">
