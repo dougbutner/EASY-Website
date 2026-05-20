@@ -1259,7 +1259,7 @@ const Index = () => {
           </div>
         </SnapSection>
 
-        <SnapSection id="price" eyebrow="EASY / XUSDC" title="Trade on Alcor" className="hidden md:flex">
+        <SnapSection id="price" eyebrow="EASY / XUSDC" title="Built on XPR, best on Alcor" className="hidden md:flex">
           <div className="flex w-full max-w-6xl flex-col gap-5">
             <p className="text-base leading-relaxed text-yellow-100/70">
               See live trades, know the top holders, check prices, and buy in from{' '}
@@ -1339,7 +1339,7 @@ const Index = () => {
           </div>
         </SnapSection>
 
-        <SnapSection id="tokens" eyebrow="Core Flex Tokens" title="EASY is the gateway. WON, GRAMS, and MEME add flavor.">
+        <SnapSection id="tokens" eyebrow="Core Flex Tokens" title="EASY is the foundation. WON, GRAMS, and MEME hold up the moon.">
           <div className="grid w-full max-w-7xl gap-4 md:grid-cols-2 xl:grid-cols-4">
             {tokens.map((token) => (
               <GlassCard key={token.symbol} className="flex min-h-80 flex-col p-6">
