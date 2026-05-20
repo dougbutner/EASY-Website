@@ -1259,7 +1259,7 @@ const Index = () => {
           </div>
         </SnapSection>
 
-        <SnapSection id="price" eyebrow="EASY / XUSDC" title="Built on XPR, best on Alcor" className="hidden md:flex">
+        <SnapSection id="price" eyebrow="Trading Terminal" title="Built on XPR, best on Alcor" className="hidden md:flex">
           <div className="flex w-full max-w-6xl flex-col gap-5">
             <p className="text-base leading-relaxed text-yellow-100/70">
               See live trades, know the top holders, check prices, and buy in from{' '}
