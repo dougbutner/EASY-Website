@@ -38,16 +38,28 @@ import {
   generateEasySolanaDepositAddress,
   submitEasySolanaWithdrawal,
 } from '@/services/storexBridge';
+import {
+  EASY_INVITE_CONTRACT,
+  EASY_INVITE_MIN_AMOUNT,
+  EASY_INVITE_TOKEN_CONTRACT,
+  fetchEasyInviteAccountStatus,
+  type EasyInviteAccountStatus,
+} from '@/services/easyInvite';
 import { fetchBridgeEasySnapshot, type BridgeEasySnapshot } from '@/services/easyBalance';
 import { signUnbroadcastWebAuthTransaction, isStorexWebAuthSigner } from '@/services/walletSessions';
 import {
+  ChevronDown,
   ExternalLink,
   Globe2,
+  Mail,
+  MessageCircle,
   Network,
   Send,
+  Share2,
   Sparkles,
   Sprout,
   TreePine,
+  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -120,6 +132,8 @@ const navItems = [
   { id: 'fringe', label: 'Fringe' },
   { id: 'solana', label: 'Solana' },
   { id: 'bridge', label: 'Bridge' },
+  { id: 'easy-life', label: 'EASY Life' },
+  { id: 'unlock', label: 'Unlock' },
 ];
 
 const tokens: TokenConfig[] = [
@@ -336,6 +350,13 @@ const jupiterEasySwap = `https://jup.ag/swap?sell=${solanaWrappedSolMint}&buy=${
 const BRIDGE_WITHDRAW_QUOTE_ID = 'FIXED';
 /** Shown in UI; XPR → Solana bridge fee (EASY). */
 const BRIDGE_FEE_XPR_TO_SOLANA_EASY = 25;
+const EASY_INVITE_ACCOUNT_RE = /^[a-z1-5.]{1,12}$/;
+const EASY_INVITE_DEFAULT_MEMO = 'Welcome to the EASY Life';
+const EASY_LIFE_SHARE_MESSAGE = "I'm inviting you to the EASY Life 🍹";
+const EASY_LIFE_RETURN_URL = 'https://flex.town/#easy-life';
+const EASY_LIFE_WEBAUTH_URL = `https://webauth.com/?returnUrl=${encodeURIComponent(EASY_LIFE_RETURN_URL)}`;
+const EASY_LIFE_SHARE_TEXT = `${EASY_LIFE_SHARE_MESSAGE}\n\nFirst open WebAuth, then continue to Flex Town:\n${EASY_LIFE_WEBAUTH_URL}`;
+const TETRAHEDRAL_LEVELS = [1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364] as const;
 
 function tokenLogoUrl(token: TokenConfig, wonRandom: string): string {
   if (token.symbol === 'WON') return wonRandom;
@@ -489,10 +510,17 @@ const Index = () => {
   const [bridgeWithdrawAmount, setBridgeWithdrawAmount] = useState('');
   const [bridgeEasySnap, setBridgeEasySnap] = useState<BridgeEasySnapshot | null>(null);
   const [bridgeBalanceLoading, setBridgeBalanceLoading] = useState(false);
+  const [easyLifeExpanded, setEasyLifeExpanded] = useState(false);
+  const [inviteAccount, setInviteAccount] = useState('');
+  const [inviteAmount, setInviteAmount] = useState(String(EASY_INVITE_MIN_AMOUNT));
+  const [inviteMemo, setInviteMemo] = useState(EASY_INVITE_DEFAULT_MEMO);
+  const [inviteAccountStatus, setInviteAccountStatus] = useState<EasyInviteAccountStatus | null>(null);
+  const [inviteAccountChecking, setInviteAccountChecking] = useState(false);
   const [reflectionPoolBySymbol, setReflectionPoolBySymbol] = useState<Record<string, string | null>>({});
   const [reflectionPoolLoading, setReflectionPoolLoading] = useState(false);
   const [chainReadEpoch, setChainReadEpoch] = useState(0);
   const mainRef = useRef<HTMLElement>(null);
+  const lastInviteAccountCheckRef = useRef<{ account: string; at: number } | null>(null);
   const [wonLogoUrl] = useState(() => pickRandomWonVariant());
 
   const selectedToken = useMemo(
@@ -647,7 +675,8 @@ const Index = () => {
     try {
       const result = await transact(actions);
       const txId = extractBroadcastTxId(result);
-      const message = `${label} sent for ${selectedToken.symbol}.`;
+      const message =
+        label === 'EASY Life invite' ? `${label} sent.` : `${label} sent for ${selectedToken.symbol}.`;
       const baseOpts = { duration: BROADCAST_SUCCESS_TOAST_MS };
 
       if (txId) {
@@ -849,6 +878,97 @@ const Index = () => {
     } finally {
       setBridgeLoading(null);
     }
+  };
+
+  const checkInviteAccountOnBlur = async () => {
+    const account = inviteAccount.trim().toLowerCase();
+    if (!account) {
+      setInviteAccountStatus(null);
+      return;
+    }
+    if (!EASY_INVITE_ACCOUNT_RE.test(account)) {
+      setInviteAccountStatus({ account, exists: false, registered: false });
+      toast.error('Enter a valid XPR account name.');
+      return;
+    }
+
+    const now = Date.now();
+    const lastCheck = lastInviteAccountCheckRef.current;
+    if (lastCheck && now - lastCheck.at < 5000) {
+      return;
+    }
+
+    lastInviteAccountCheckRef.current = { account, at: now };
+    setInviteAccountChecking(true);
+    try {
+      const status = await fetchEasyInviteAccountStatus(account);
+      setInviteAccountStatus(status);
+      if (!status.exists) {
+        toast.error(`${account} does not exist on XPR Network yet.`);
+      } else if (status.registered) {
+        toast.error(`${account} is already living the EASY life.`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not check that account.');
+    } finally {
+      setInviteAccountChecking(false);
+    }
+  };
+
+  const sendEasyLifeInvite = () => {
+    const account = inviteAccount.trim().toLowerCase();
+    if (!isLoggedIn || !actor) {
+      toast.error('Connect a wallet first.');
+      return;
+    }
+    if (!EASY_INVITE_ACCOUNT_RE.test(account)) {
+      toast.error('Enter a valid XPR account name.');
+      return;
+    }
+    if (inviteAccountStatus?.account !== account || !inviteAccountStatus.exists) {
+      toast.error('Tap out of the account field so we can check the account first.');
+      return;
+    }
+    if (inviteAccountStatus.registered) {
+      toast.error('That account is already registered.');
+      return;
+    }
+
+    const amount = Number(inviteAmount);
+    if (!Number.isFinite(amount) || amount < EASY_INVITE_MIN_AMOUNT) {
+      toast.error(`Invite amount must be at least ${EASY_INVITE_MIN_AMOUNT} EASY.`);
+      return;
+    }
+
+    submitAction('EASY Life invite', [
+      {
+        account: EASY_INVITE_TOKEN_CONTRACT,
+        name: 'transfer',
+        data: {
+          from: actor,
+          to: EASY_INVITE_CONTRACT,
+          quantity: `${amount.toFixed(6)} EASY`,
+          memo: `${account}|${inviteMemo.trim() || EASY_INVITE_DEFAULT_MEMO}`,
+        },
+      },
+    ]);
+  };
+
+  const shareEasyLifeInvite = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'The EASY Life',
+          text: EASY_LIFE_SHARE_MESSAGE,
+          url: EASY_LIFE_WEBAUTH_URL,
+        });
+        return;
+      } catch {
+        // Fall through to clipboard so dismissed native share sheets still have a useful path.
+      }
+    }
+    await navigator.clipboard?.writeText(EASY_LIFE_SHARE_TEXT);
+    toast.success('Invite message copied.');
   };
 
   return (
@@ -1651,6 +1771,242 @@ const Index = () => {
           </GlassCard>
         </SnapSection>
 
+        <SnapSection id="easy-life" eyebrow="The EASY Life" title="Invite someone into reflections.">
+          <div className="grid w-full max-w-7xl gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+            <GlassCard className="p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-black uppercase tracking-[0.22em] text-yellow-300">
+                    Paid invite
+                  </p>
+                  <h3 className="mt-3 text-3xl font-black text-yellow-50">Spend 200 EASY, start their wallet.</h3>
+                  <p className="mt-3 leading-7 text-yellow-100/65">
+                    You send at least 200 EASY to invite another account. The invite contract forwards 100 EASY to
+                    the new user so they start receiving reflections, while 100 EASY is banked for the treasury.
+                  </p>
+                </div>
+                <TokenThumb src={TOKEN_LOGO.EASY} alt="" className="h-14 w-14 rounded-2xl" />
+              </div>
+
+              <div className="mt-6 grid gap-4">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label htmlFor="easy-life-account" className="text-yellow-100/80">
+                      XPR account to invite
+                    </Label>
+                    <span className="text-xs text-yellow-100/45">
+                      Checked only after blur, max once per 5 seconds.
+                    </span>
+                  </div>
+                  <Input
+                    id="easy-life-account"
+                    value={inviteAccount}
+                    onChange={(event) => {
+                      const next = event.target.value.toLowerCase();
+                      setInviteAccount(next);
+                      if (inviteAccountStatus && inviteAccountStatus.account !== next.trim()) {
+                        setInviteAccountStatus(null);
+                      }
+                    }}
+                    onBlur={() => void checkInviteAccountOnBlur()}
+                    placeholder="accountname"
+                    className="border-yellow-300/20 bg-black/70 font-mono text-yellow-50"
+                  />
+                  <p className="min-h-5 text-xs text-yellow-100/50">
+                    {inviteAccountChecking
+                      ? 'Checking account...'
+                      : inviteAccountStatus?.account === inviteAccount.trim().toLowerCase()
+                        ? inviteAccountStatus.exists
+                          ? inviteAccountStatus.registered
+                            ? 'Account exists, but is already registered.'
+                            : 'Account exists and can be invited.'
+                          : 'Account does not exist yet. Invite them to XPR first.'
+                        : 'Type an account, then leave the field to check it.'}
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-[0.55fr_1fr]">
+                  <div className="space-y-2">
+                    <Label htmlFor="easy-life-amount" className="text-yellow-100/80">
+                      EASY amount
+                    </Label>
+                    <Input
+                      id="easy-life-amount"
+                      value={inviteAmount}
+                      onChange={(event) => setInviteAmount(event.target.value)}
+                      inputMode="decimal"
+                      className="border-yellow-300/20 bg-black/70 text-yellow-50"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="easy-life-memo" className="text-yellow-100/80">
+                      Message forwarded to them
+                    </Label>
+                    <Input
+                      id="easy-life-memo"
+                      value={inviteMemo}
+                      onChange={(event) => setInviteMemo(event.target.value)}
+                      className="border-yellow-300/20 bg-black/70 text-yellow-50"
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={sendEasyLifeInvite}
+                  disabled={!isLoggedIn || submitting !== null || inviteAccountChecking}
+                  className="bg-yellow-300 text-black hover:bg-yellow-200"
+                >
+                  {submitting === 'EASY Life invite' ? 'Opening transaction...' : 'Invite to the EASY Life'}
+                </Button>
+                <p className="text-xs leading-relaxed text-yellow-100/45">
+                  Transaction: <code className={codeInlineClass}>mon3y::transfer</code> to{' '}
+                  <code className={codeInlineClass}>invite.mon3y</code>, quantity at least{' '}
+                  <code className={codeInlineClass}>200.000000 EASY</code>, memo{' '}
+                  <code className={codeInlineClass}>account|message</code>.
+                </p>
+              </div>
+            </GlassCard>
+
+            <GlassCard className="p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-black uppercase tracking-[0.22em] text-yellow-300">Compact guide</p>
+                  <h3 className="mt-3 text-3xl font-black text-yellow-50">Tree score becomes a multiplier.</h3>
+                  <p className="mt-3 leading-7 text-yellow-100/65">
+                    Every person invited through your downstream adds to your invite score up the chain. Your score
+                    maps to the largest tetrahedral level reached, and that level multiplies banked EASY when rewards
+                    are claimed.
+                  </p>
+                </div>
+                <Users className="h-10 w-10 shrink-0 text-yellow-300" />
+              </div>
+
+              <div className="mt-6 rounded-[1.5rem] border border-yellow-300/15 bg-black/50 p-4">
+                <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2 text-center text-xs sm:text-sm">
+                  <TreeNode label="You" value="inviter" />
+                  <span className="text-yellow-300/65">+</span>
+                  <TreeNode label="Direct" value="+1 score" />
+                  <span className="text-yellow-300/65">+</span>
+                  <TreeNode label="Downstream" value="+1 each" />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setEasyLifeExpanded((open) => !open)}
+                className="mt-5 flex w-full items-center justify-between rounded-2xl border border-yellow-300/15 bg-yellow-300/[0.06] px-4 py-3 text-left font-bold text-yellow-100 transition hover:bg-yellow-300/10"
+              >
+                <span>{easyLifeExpanded ? 'Hide full economics' : 'Expand economics and levels'}</span>
+                <ChevronDown
+                  className={cn('h-5 w-5 transition-transform', easyLifeExpanded && 'rotate-180')}
+                  aria-hidden
+                />
+              </button>
+
+              {easyLifeExpanded && (
+                <div className="mt-5 space-y-5">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Metric value="200" label="Minimum EASY invite" />
+                    <Metric value="100" label="EASY to new user" />
+                    <Metric value="100" label="EASY to treasury" />
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-yellow-300/15">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-yellow-300/10 text-xs uppercase tracking-[0.18em] text-yellow-200">
+                        <tr>
+                          <th className="px-4 py-3">Multiplier level</th>
+                          <th className="px-4 py-3">Invite score needed</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-yellow-300/10 text-yellow-100/70">
+                        {TETRAHEDRAL_LEVELS.map((score, index) => (
+                          <tr key={score}>
+                            <td className="px-4 py-3 font-mono text-yellow-100">{index + 1}x</td>
+                            <td className="px-4 py-3">{score}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-sm leading-7 text-yellow-100/55">
+                    Reward estimate: banked EASY times your tetrahedral position, paid from the invite reward pool
+                    against the total banked pool. Higher downstream activity pushes your score into higher levels.
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-6 rounded-[1.5rem] border border-yellow-300/15 bg-black/50 p-4">
+                <p className="text-sm font-black uppercase tracking-[0.22em] text-yellow-300">
+                  Invite them to XPR first
+                </p>
+                <p className="mt-2 text-sm leading-6 text-yellow-100/60">
+                  Send a preloaded message that opens WebAuth first, then points them back to Flex Town.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void shareEasyLifeInvite()}
+                    className="border-yellow-300/30 bg-black/50 text-yellow-100 hover:bg-yellow-300 hover:text-black"
+                  >
+                    <Share2 className="mr-2 h-4 w-4" />
+                    Share
+                  </Button>
+                  <a
+                    href={`mailto:?subject=${encodeURIComponent('The EASY Life')}&body=${encodeURIComponent(EASY_LIFE_SHARE_TEXT)}`}
+                    className="inline-flex items-center rounded-md border border-yellow-300/30 bg-black/50 px-4 py-2 text-sm font-medium text-yellow-100 hover:bg-yellow-300 hover:text-black"
+                  >
+                    <Mail className="mr-2 h-4 w-4" />
+                    Email
+                  </a>
+                  <a
+                    href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(EASY_LIFE_SHARE_TEXT)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center rounded-md border border-yellow-300/30 bg-black/50 px-4 py-2 text-sm font-medium text-yellow-100 hover:bg-yellow-300 hover:text-black"
+                  >
+                    <MessageCircle className="mr-2 h-4 w-4" />
+                    Twitter
+                  </a>
+                </div>
+              </div>
+            </GlassCard>
+          </div>
+        </SnapSection>
+
+        <SnapSection id="unlock" eyebrow="Unlock the EASY Life" title="Learn LPing with EASY.">
+          <div className="w-full max-w-7xl space-y-5">
+            <p className="max-w-3xl text-xl leading-9 text-yellow-100/70">
+              EASY Life access is training for liquidity providing with EASY: how the pools work, how reflections
+              support holders, and how to participate without guessing.
+            </p>
+            <div className="grid gap-4 md:grid-cols-3">
+              <GlassCard className="p-6">
+                <h3 className="text-3xl font-black text-yellow-50">Hold EASY</h3>
+                <p className="mt-3 text-5xl font-black text-yellow-300">50K</p>
+                <p className="mt-4 leading-7 text-yellow-100/60">
+                  Hold 50,000 EASY, roughly 800 USD at the stated access target.
+                </p>
+              </GlassCard>
+              <GlassCard className="p-6">
+                <h3 className="text-3xl font-black text-yellow-50">Build score</h3>
+                <p className="mt-3 text-5xl font-black text-yellow-300">50</p>
+                <p className="mt-4 leading-7 text-yellow-100/60">
+                  Reach an invite score of 50 through people you invite and their downstream activity.
+                </p>
+              </GlassCard>
+              <GlassCard className="p-6">
+                <h3 className="text-3xl font-black text-yellow-50">Pay once</h3>
+                <p className="mt-3 text-5xl font-black text-yellow-300">$250</p>
+                <p className="mt-4 leading-7 text-yellow-100/60">
+                  One-time regular-money access path paid directly to the EASY Life host.
+                </p>
+              </GlassCard>
+            </div>
+          </div>
+        </SnapSection>
+
         <footer className="snap-start border-t border-yellow-300/15 bg-black/95 px-4 py-14 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-3xl space-y-5 text-center text-xs leading-relaxed text-yellow-100/50 sm:text-sm">
             <p>
@@ -1772,6 +2128,15 @@ function Metric({ value, label }: { value: string; label: string }) {
     <div className="rounded-[1.5rem] border border-yellow-300/15 bg-yellow-300/[0.05] p-5">
       <div className="text-4xl font-black text-yellow-300">{value}</div>
       <div className="mt-2 text-sm uppercase tracking-[0.18em] text-yellow-100/55">{label}</div>
+    </div>
+  );
+}
+
+function TreeNode({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-yellow-300/15 bg-yellow-300/[0.05] px-3 py-4">
+      <div className="font-black text-yellow-50">{label}</div>
+      <div className="mt-1 font-mono text-[11px] uppercase tracking-wide text-yellow-300/75">{value}</div>
     </div>
   );
 }
