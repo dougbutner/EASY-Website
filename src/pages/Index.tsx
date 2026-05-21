@@ -245,18 +245,27 @@ const featureCards = [
     image: TOKEN_LOGO.EASY,
     title: 'Send It',
     body: 'Splash mon3y in the reflection pool on kin, your click sends pending rewards to all holders.',
+    sectionId: 'flex-tools',
   },
   {
     image: TOKEN_LOGO.GRAMS,
     title: 'Flex your Reward Token',
     body: 'Choose your rewards: let EASY compound or stack OG blue chips like XBTC, XXRP, METAL. Holders of WON and GRAMS can pass on % of rewards to any account, with a custom memo feature.',
+    sectionId: 'flex-tools',
   },
   {
-    image: TOKEN_LOGO.MEME,
-    title: 'Taxes: Optional in the New Earth',
-    body: 'The fee is optional, but turning it off disables your rewards forever.',
+    image: TOKEN_LOGO.EASY,
+    title: 'Welcome Program',
+    body: 'Welcoming someone costs 200 EASY: 100 to their wallet and 100 to the collective vault. Vault yield splits among participants, with multipliers as your network grows.',
+    sectionId: 'easy-life',
   },
 ];
+
+const firstFoldJumpLinks = [
+  { id: 'flex-tools', emoji: '💸', label: 'Send it' },
+  { id: 'bridge', emoji: '🌉', label: 'Solana XPR Bridge' },
+  { id: 'easy-life', emoji: '🤝', label: 'Welcome Friend' },
+] as const;
 
 /** Alcor XPR web UI: `https://alcor.exchange/v/xpr/...` (swap, swap-widget, terminal, farm). */
 const alcorEasyTerminal = 'https://alcor.exchange/v/xpr/terminal/easy-mon3y';
@@ -989,13 +998,35 @@ const Index = () => {
         <SnapSection id="tools" eyebrow="Flex town" title="New Earth Finance for the EASY life 🍹">
           <div className="w-full max-w-7xl space-y-5">
             <FlexTownStoryRotator />
+            <div className="flex flex-wrap justify-center gap-3">
+              {firstFoldJumpLinks.map((link) => (
+                <button
+                  key={link.id}
+                  type="button"
+                  onClick={() => scrollToSection(link.id)}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-yellow-300/25 bg-yellow-300/[0.08] px-5 py-3 text-sm font-bold text-yellow-100 transition hover:border-yellow-300/40 hover:bg-yellow-300/15 hover:text-yellow-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-300"
+                >
+                  <span className="text-xl leading-none" aria-hidden>
+                    {link.emoji}
+                  </span>
+                  {link.label}
+                </button>
+              ))}
+            </div>
             <div className="grid gap-3 sm:grid-cols-3">
               {featureCards.map((feature) => (
-                <GlassCard key={feature.title}>
-                  <TokenThumb src={feature.image} alt="" className="h-11 w-11 rounded-xl" />
-                  <h3 className="mt-4 text-xl font-black text-yellow-100">{feature.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-yellow-100/60">{feature.body}</p>
-                </GlassCard>
+                <button
+                  key={feature.title}
+                  type="button"
+                  onClick={() => scrollToSection(feature.sectionId)}
+                  className="w-full cursor-pointer rounded-[2rem] text-left transition hover:ring-2 hover:ring-yellow-300/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-300"
+                >
+                  <GlassCard className="h-full">
+                    <TokenThumb src={feature.image} alt="" className="h-11 w-11 rounded-xl" />
+                    <h3 className="mt-4 text-xl font-black text-yellow-100">{feature.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-yellow-100/60">{feature.body}</p>
+                  </GlassCard>
+                </button>
               ))}
             </div>
           </div>
