@@ -1951,8 +1951,8 @@ const Index = () => {
                   Welcome loved ones to XPR Network
                 </p>
                 <p className="mt-2 text-sm leading-6 text-yellow-100/60">
-                  Challenge them to set up a wallet when it feels right. If they do, welcome them with a Flex package
-                  starting with EASY — if not, let it be; it&apos;s not time.
+                  Share a short invite: why EASY might fit them, links to WebAuth and flex.town, and ask for their
+                  username when they&apos;re ready to receive EASY.
                 </p>
                 <EasyLifeShareBar className="mt-4" />
               </div>

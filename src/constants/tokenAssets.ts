@@ -49,7 +49,12 @@ export const WON_VARIANT_URLS: readonly string[] = [
   `${WON_DIR}/won-yaing-blue.png`,
 ];
 
+/** Pick one item uniformly at random (same pattern as WON logo on page load). */
+export function pickRandomFrom<T>(items: readonly T[]): T {
+  const i = Math.floor(Math.random() * items.length);
+  return items[i] ?? items[0];
+}
+
 export function pickRandomWonVariant(): string {
-  const i = Math.floor(Math.random() * WON_VARIANT_URLS.length);
-  return WON_VARIANT_URLS[i] ?? `${WON_DIR}/won.png`;
+  return pickRandomFrom(WON_VARIANT_URLS);
 }

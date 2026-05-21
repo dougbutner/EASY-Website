@@ -4,20 +4,12 @@
  */
 import { type ReactNode, useMemo, useState } from 'react';
 import { Share2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-
-const EASY_LIFE_RETURN_URL = 'https://flex.town/#easy-life';
-const EASY_LIFE_WEBAUTH_URL = `https://webauth.com/?returnUrl=${encodeURIComponent(EASY_LIFE_RETURN_URL)}`;
-const EASY_LIFE_SHARE_TITLE = 'Welcome loved ones to XPR Network';
-
-export const EASY_LIFE_SHARE_TEXT = [
+import {
   EASY_LIFE_SHARE_TITLE,
-  '',
-  "When onboarding to the EASY life, challenge them to set up a wallet. If they do, hook them up with a Flex welcome package starting with EASY. If not, don't bug them, it's not time.",
-  '',
-  `Create a wallet: ${EASY_LIFE_WEBAUTH_URL}`,
-  `EASY Life on Flex Town: ${EASY_LIFE_RETURN_URL}`,
-].join('\n');
+  EASY_LIFE_TOOLS_URL,
+  pickRandomEasyLifeShareText,
+} from '@/constants/easyLifeShareMessages';
+import { cn } from '@/lib/utils';
 
 const shareIconClass = 'h-5 w-5';
 
@@ -74,7 +66,7 @@ type ShareChannel = {
 };
 
 function buildShareChannels(text: string): ShareChannel[] {
-  const params = new URLSearchParams({ url: EASY_LIFE_RETURN_URL, text });
+  const params = new URLSearchParams({ url: EASY_LIFE_TOOLS_URL, text });
   return [
     {
       id: 'telegram',
@@ -118,18 +110,19 @@ const iconButtonClass =
   'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-yellow-300/20 bg-black/60 text-yellow-100/90 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/50';
 
 export function EasyLifeShareBar({ className }: { className?: string }) {
+  const [shareText] = useState(pickRandomEasyLifeShareText);
   const [nativeShareReady] = useState(
     () => typeof navigator !== 'undefined' && typeof navigator.share === 'function'
   );
-  const channels = useMemo(() => buildShareChannels(EASY_LIFE_SHARE_TEXT), []);
+  const channels = useMemo(() => buildShareChannels(shareText), [shareText]);
 
   const nativeShare = async () => {
     if (!navigator.share) return;
     try {
       await navigator.share({
         title: EASY_LIFE_SHARE_TITLE,
-        text: EASY_LIFE_SHARE_TEXT,
-        url: EASY_LIFE_RETURN_URL,
+        text: shareText,
+        url: EASY_LIFE_TOOLS_URL,
       });
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -167,4 +160,3 @@ export function EasyLifeShareBar({ className }: { className?: string }) {
     </div>
   );
 }
-
