@@ -10,15 +10,77 @@ export type EasyInviteAccountStatus = {
   registered: boolean;
 };
 
+export type EasyInviteAdopter = {
+  account: string;
+  invitedby: string;
+  score: number;
+  banked: string;
+  lastupdated: number;
+};
+
 type GetAccountResponse = {
   account_name?: string;
   message?: string;
 };
 
+type AdopterRow = {
+  account?: string;
+  invitedby?: string;
+  score?: number;
+  banked?: string;
+  lastupdated?: number;
+};
+
 type GetTableRowsResponse = {
-  rows?: Array<{ account?: string }>;
+  rows?: AdopterRow[];
+  more?: boolean;
+  next_key?: string | number;
   message?: string;
 };
+
+function parseAdopterRow(row: AdopterRow): EasyInviteAdopter | null {
+  const account = row.account?.trim();
+  if (!account) return null;
+  return {
+    account,
+    invitedby: row.invitedby?.trim() ?? '',
+    score: typeof row.score === 'number' ? row.score : 0,
+    banked: row.banked?.trim() ?? '0.000000 EASY',
+    lastupdated: typeof row.lastupdated === 'number' ? row.lastupdated : 0,
+  };
+}
+
+async function fetchAdoptersPage(
+  endpoint: string,
+  lowerBound?: string
+): Promise<{ rows: EasyInviteAdopter[]; more: boolean; nextKey?: string }> {
+  const body: Record<string, unknown> = {
+    json: true,
+    code: EASY_INVITE_CONTRACT,
+    scope: EASY_INVITE_CONTRACT,
+    table: 'adopters',
+    limit: 500,
+  };
+  if (lowerBound !== undefined) body.lower_bound = lowerBound;
+
+  const res = await fetch(`${endpoint}/v1/chain/get_table_rows`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => ({}))) as GetTableRowsResponse;
+  if (!res.ok) throw new Error(data.message || `Adopters table read failed (${res.status})`);
+
+  const rows = (data.rows ?? [])
+    .map(parseAdopterRow)
+    .filter((row): row is EasyInviteAdopter => row !== null);
+
+  return {
+    rows,
+    more: Boolean(data.more),
+    nextKey: data.next_key !== undefined && data.next_key !== null ? String(data.next_key) : undefined,
+  };
+}
 
 async function accountExistsAtEndpoint(account: string, endpoint: string): Promise<boolean> {
   const res = await fetch(`${endpoint}/v1/chain/get_account`, {
@@ -62,4 +124,68 @@ export async function fetchEasyInviteAccountStatus(account: string): Promise<Eas
     }
   }
   throw lastError ?? new Error('Unable to check invite account.');
+}
+
+export async function fetchEasyInviteAdopter(account: string): Promise<EasyInviteAdopter | null> {
+  let lastError: Error | null = null;
+  for (const endpoint of CHAIN_ENDPOINTS) {
+    try {
+      const res = await fetch(`${endpoint}/v1/chain/get_table_rows`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          json: true,
+          code: EASY_INVITE_CONTRACT,
+          scope: EASY_INVITE_CONTRACT,
+          table: 'adopters',
+          lower_bound: account,
+          limit: 1,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as GetTableRowsResponse;
+      if (!res.ok) throw new Error(data.message || `Adopter lookup failed (${res.status})`);
+      const row = (data.rows ?? []).find((r) => r.account === account);
+      return row ? parseAdopterRow(row) : null;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+  throw lastError ?? new Error('Unable to load adopter row.');
+}
+
+/**
+ * One paginated pass over `adopters`; returns direct invitees for each account in `inviters`.
+ */
+export async function fetchEasyInviteesByInviters(
+  inviters: string[]
+): Promise<Map<string, EasyInviteAdopter[]>> {
+  const inviterSet = new Set(inviters);
+  const grouped = new Map<string, EasyInviteAdopter[]>();
+  for (const inv of inviters) grouped.set(inv, []);
+
+  let lastError: Error | null = null;
+  for (const endpoint of CHAIN_ENDPOINTS) {
+    try {
+      let lowerBound: string | undefined;
+      for (;;) {
+        const page = await fetchAdoptersPage(endpoint, lowerBound);
+        for (const row of page.rows) {
+          if (!inviterSet.has(row.invitedby)) continue;
+          grouped.get(row.invitedby)!.push(row);
+        }
+        if (!page.more) break;
+        if (page.nextKey !== undefined) {
+          lowerBound = page.nextKey;
+          continue;
+        }
+        const last = page.rows[page.rows.length - 1];
+        if (!last) break;
+        lowerBound = last.account;
+      }
+      return grouped;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+  throw lastError ?? new Error('Unable to load invite connections.');
 }
