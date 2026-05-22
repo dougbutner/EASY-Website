@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   fetchEasyInviteAdopter,
   fetchEasyInviteesByInviters,
@@ -19,13 +20,20 @@ export type InviteTreeDatum = {
   children: InviteTreeDatum[];
 };
 
+const EASY_INVITE_ACCOUNT_RE = /^[a-z1-5.]{1,12}$/;
+
 function buildTreeFromMaps(
   rootAccount: string,
   rootAdopter: EasyInviteAdopter | null,
   childrenByInviter: Map<string, EasyInviteAdopter[]>,
   maxDepth: number
 ): InviteTreeDatum {
-  function node(account: string, adopter: EasyInviteAdopter | null, depth: number): InviteTreeDatum {
+  function node(
+    account: string,
+    adopter: EasyInviteAdopter | null,
+    depth: number,
+    visited: Set<string>
+  ): InviteTreeDatum {
     const base: InviteTreeDatum = {
       account,
       score: adopter?.score ?? 0,
@@ -33,12 +41,13 @@ function buildTreeFromMaps(
       invitedby: adopter?.invitedby ?? '',
       children: [],
     };
-    if (depth >= maxDepth) return base;
+    if (depth >= maxDepth || visited.has(account)) return base;
+    visited.add(account);
     const kids = childrenByInviter.get(account) ?? [];
-    base.children = kids.map((k) => node(k.account, k, depth + 1));
+    base.children = kids.map((k) => node(k.account, k, depth + 1, new Set(visited)));
     return base;
   }
-  return node(rootAccount, rootAdopter, 0);
+  return node(rootAccount, rootAdopter, 0, new Set<string>());
 }
 
 function accountsAtDepth(root: InviteTreeDatum, depth: number): string[] {
@@ -70,42 +79,69 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
   const svgRef = useRef<SVGSVGElement>(null);
 
   const [branchDepth, setBranchDepth] = useState(0);
+  const [viewedAccountInput, setViewedAccountInput] = useState('');
+  const [activeRootAccount, setActiveRootAccount] = useState<string | null>(rootAccount ?? null);
   const [rootAdopter, setRootAdopter] = useState<EasyInviteAdopter | null>(null);
+  const [upstreamAdopter, setUpstreamAdopter] = useState<EasyInviteAdopter | null>(null);
   const [childrenByInviter, setChildrenByInviter] = useState<Map<string, EasyInviteAdopter[]>>(
     () => new Map()
   );
+  const [loadedInviters, setLoadedInviters] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const treeData = useMemo(() => {
-    if (!rootAccount || branchDepth < 1) return null;
-    return buildTreeFromMaps(rootAccount, rootAdopter, childrenByInviter, branchDepth);
-  }, [rootAccount, branchDepth, rootAdopter, childrenByInviter]);
+    if (!activeRootAccount || branchDepth < 1) return null;
+    return buildTreeFromMaps(activeRootAccount, rootAdopter, childrenByInviter, branchDepth);
+  }, [activeRootAccount, branchDepth, rootAdopter, childrenByInviter]);
 
   const reset = useCallback(() => {
     setBranchDepth(0);
     setRootAdopter(null);
+    setUpstreamAdopter(null);
     setChildrenByInviter(new Map());
+    setLoadedInviters(new Set());
     setError(null);
   }, []);
 
   useEffect(() => {
+    const next = rootAccount?.trim().toLowerCase() ?? '';
+    setViewedAccountInput(next);
+    setActiveRootAccount(next || null);
     reset();
   }, [rootAccount, reset]);
 
-  const loadBranch = async () => {
-    if (!rootAccount) return;
+  const loadBranch = async (nextRoot?: string) => {
+    const account = (nextRoot ?? activeRootAccount ?? '').trim().toLowerCase();
+    if (!account) {
+      setError('Type an account to load a welcome branch.');
+      return;
+    }
+    if (!EASY_INVITE_ACCOUNT_RE.test(account)) {
+      setError('Enter a valid XPR account name.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const adopter = await fetchEasyInviteAdopter(rootAccount);
+      const adopter = await fetchEasyInviteAdopter(account);
       if (!adopter) {
         setError('This wallet has not been welcomed into the program yet.');
+        setActiveRootAccount(account);
         return;
       }
-      const map = await fetchEasyInviteesByInviters([rootAccount]);
+      const map = await fetchEasyInviteesByInviters([account]);
       setRootAdopter(adopter);
+      if (adopter.invitedby) {
+        setUpstreamAdopter(await fetchEasyInviteAdopter(adopter.invitedby));
+      } else {
+        setUpstreamAdopter(null);
+      }
       setChildrenByInviter(map);
+      setLoadedInviters(new Set([account]));
+      setViewedAccountInput(account);
+      setActiveRootAccount(account);
       setBranchDepth(1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load welcome branch.');
@@ -115,8 +151,8 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
   };
 
   const loadNextEdge = async () => {
-    if (!rootAccount || !treeData || branchDepth < 1) return;
-    const frontier = accountsAtDepth(treeData, branchDepth);
+    if (!activeRootAccount || !treeData || branchDepth < 1) return;
+    const frontier = accountsAtDepth(treeData, branchDepth).filter((account) => !loadedInviters.has(account));
     if (!frontier.length) return;
 
     setLoading(true);
@@ -128,6 +164,11 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
         for (const [inv, rows] of nextMap) merged.set(inv, rows);
         return merged;
       });
+      setLoadedInviters((prev) => {
+        const next = new Set(prev);
+        for (const inviter of frontier) next.add(inviter);
+        return next;
+      });
       setBranchDepth((d) => d + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load next edge.');
@@ -136,8 +177,30 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
     }
   };
 
-  const directCount = rootAccount ? (childrenByInviter.get(rootAccount)?.length ?? 0) : 0;
-  const frontierCount = treeData ? accountsAtDepth(treeData, branchDepth).length : 0;
+  const loadSingleEdge = useCallback(async (account: string, depth: number) => {
+    if (loading || loadedInviters.has(account)) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const nextMap = await fetchEasyInviteesByInviters([account]);
+      setChildrenByInviter((prev) => {
+        const merged = new Map(prev);
+        for (const [inv, rows] of nextMap) merged.set(inv, rows);
+        return merged;
+      });
+      setLoadedInviters((prev) => new Set(prev).add(account));
+      setBranchDepth((d) => Math.max(d, depth + 1));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load that edge.');
+    } finally {
+      setLoading(false);
+    }
+  }, [loadedInviters, loading]);
+
+  const directCount = activeRootAccount ? (childrenByInviter.get(activeRootAccount)?.length ?? 0) : 0;
+  const frontierCount = treeData
+    ? accountsAtDepth(treeData, branchDepth).filter((account) => !loadedInviters.has(account)).length
+    : 0;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -208,6 +271,65 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
       .attr('font-size', 10)
       .text((d) => `score ${d.data.score}`);
 
+    const rootNode = nodes.find((n) => n.depth === 0);
+    if (rootNode && upstreamAdopter?.account) {
+      const upstreamY = -140;
+      const upstreamX = rootNode.x;
+      inner
+        .append('path')
+        .attr(
+          'd',
+          `M ${upstreamY},${upstreamX} C -100,${upstreamX} -40,${rootNode.x} ${rootNode.y},${rootNode.x}`
+        )
+        .attr('fill', 'none')
+        .attr('stroke', 'rgba(250,204,21,0.22)')
+        .attr('stroke-dasharray', '4 4')
+        .attr('stroke-width', 1.2);
+
+      const upstreamNode = inner.append('g').attr('transform', `translate(${upstreamY},${upstreamX})`);
+      upstreamNode
+        .append('circle')
+        .attr('r', 8)
+        .attr('fill', 'rgba(250,204,21,0.08)')
+        .attr('stroke', 'rgba(250,204,21,0.4)')
+        .attr('stroke-width', 1.2);
+      upstreamNode
+        .append('text')
+        .attr('dy', '-0.9em')
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'rgba(254,252,232,0.45)')
+        .attr('font-size', 10)
+        .text('upstream +1');
+      upstreamNode
+        .append('text')
+        .attr('dy', '0.32em')
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'rgba(254,252,232,0.65)')
+        .attr('font-size', 11)
+        .attr('font-family', 'ui-monospace, monospace')
+        .text(upstreamAdopter.account);
+    }
+
+    const expandable = (d: d3.HierarchyPointNode<InviteTreeDatum>) =>
+      d.data.score > 1 && !loadedInviters.has(d.data.account);
+
+    node
+      .style('cursor', (d) => (expandable(d) ? 'pointer' : 'default'))
+      .on('click', (_, d) => {
+        if (!expandable(d)) return;
+        void loadSingleEdge(d.data.account, d.depth);
+      });
+
+    node
+      .append('text')
+      .filter((d) => expandable(d))
+      .attr('dy', '0.35em')
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#facc15')
+      .attr('font-size', 10)
+      .attr('font-weight', 700)
+      .text('+');
+
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.35, 2.5])
@@ -220,18 +342,27 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
     return () => {
       d3.select(svg).on('.zoom', null);
     };
-  }, [treeData]);
+  }, [treeData, upstreamAdopter, loadedInviters, loadSingleEdge]);
 
   return (
     <div className={cn('space-y-4', className)}>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-[220px] flex-1 space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-yellow-100/50">Account</p>
+          <Input
+            value={viewedAccountInput}
+            onChange={(event) => setViewedAccountInput(event.target.value.toLowerCase())}
+            placeholder={rootAccount ? 'Type any account' : 'accountname'}
+            className="border-yellow-300/20 bg-black/70 font-mono text-yellow-50"
+          />
+        </div>
         <Button
           type="button"
-          onClick={() => void loadBranch()}
-          disabled={!rootAccount || loading}
+          onClick={() => void loadBranch(viewedAccountInput)}
+          disabled={loading}
           className="bg-yellow-300 text-black hover:bg-yellow-200"
         >
-          {loading && branchDepth < 1 ? 'Loading branch…' : 'Load welcome branch'}
+          {loading && branchDepth < 1 ? 'Loading branch…' : 'View network'}
         </Button>
         <Button
           type="button"
@@ -251,7 +382,7 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
       </div>
 
       {!rootAccount ? (
-        <p className="text-sm text-yellow-100/55">Connect a wallet to see your welcome network.</p>
+        <p className="text-sm text-yellow-100/55">Connect a wallet or type an account to inspect the welcome network.</p>
       ) : null}
 
       {error ? <p className="text-sm text-red-300/90">{error}</p> : null}
@@ -264,8 +395,10 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
           <svg ref={svgRef} className="h-full min-h-[320px] w-full touch-none" role="img" aria-label="Invite branch tree" />
         ) : (
           <div className="flex min-h-[320px] flex-col items-center justify-center gap-2 px-6 text-center text-sm text-yellow-100/45">
-            <p>Your downstream welcomes appear here after you load the branch.</p>
-            <p className="text-xs">Each &quot;Load next edge&quot; adds one more hop — one chain scan per click.</p>
+            <p>Your downstream welcomes appear here after you load a branch.</p>
+            <p className="text-xs">
+              Each &quot;Load next edge&quot; adds one more hop. Nodes with score &gt; 1 show a <span className="text-yellow-300">+</span> to load their downstream.
+            </p>
           </div>
         )}
       </div>

@@ -45,8 +45,13 @@ import {
   EASY_INVITE_MIN_AMOUNT,
   EASY_INVITE_TOKEN_CONTRACT,
   fetchEasyInviteAccountStatus,
+  fetchEasyInviteProgramStatus,
+  fetchEasyInviteRequests,
   type EasyInviteAccountStatus,
+  type EasyInviteProgramStatus,
+  type EasyInviteRequest,
 } from '@/services/easyInvite';
+import { formatFlexAssetPretty } from '@/services/flexFlexerBalance';
 import { fetchBridgeEasySnapshot, type BridgeEasySnapshot } from '@/services/easyBalance';
 import { signUnbroadcastWebAuthTransaction, isStorexWebAuthSigner } from '@/services/walletSessions';
 import {
@@ -137,6 +142,7 @@ const navItems = [
 
 /** Snap panels that share one nav tab (e.g. Welcome program + branch tree). */
 const NAV_SECTION_ALIASES: Record<string, string> = {
+  'easy-life-status': 'easy-life',
   'easy-life-branch': 'easy-life',
 };
 
@@ -525,6 +531,12 @@ const Index = () => {
   const [inviteMemo, setInviteMemo] = useState(EASY_INVITE_DEFAULT_MEMO);
   const [inviteAccountStatus, setInviteAccountStatus] = useState<EasyInviteAccountStatus | null>(null);
   const [inviteAccountChecking, setInviteAccountChecking] = useState(false);
+  const [inviteProgramStatus, setInviteProgramStatus] = useState<EasyInviteProgramStatus | null>(null);
+  const [inviteProgramLoading, setInviteProgramLoading] = useState(false);
+  const [askWelcomeInviter, setAskWelcomeInviter] = useState('');
+  const [askWelcomeAccount, setAskWelcomeAccount] = useState('');
+  const [inviteRequests, setInviteRequests] = useState<EasyInviteRequest[]>([]);
+  const [inviteRequestsLoading, setInviteRequestsLoading] = useState(false);
   const [reflectionPoolBySymbol, setReflectionPoolBySymbol] = useState<Record<string, string | null>>({});
   const [reflectionPoolLoading, setReflectionPoolLoading] = useState(false);
   const [chainReadEpoch, setChainReadEpoch] = useState(0);
@@ -677,6 +689,62 @@ const Index = () => {
     };
   }, [actor, loading]);
 
+  useEffect(() => {
+    if (!actor || loading) {
+      setInviteProgramStatus(null);
+      setInviteProgramLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setInviteProgramLoading(true);
+    fetchEasyInviteProgramStatus(actor)
+      .then((status) => {
+        if (!cancelled) setInviteProgramStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setInviteProgramStatus(null);
+      })
+      .finally(() => {
+        if (!cancelled) setInviteProgramLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [actor, loading, chainReadEpoch]);
+
+  useEffect(() => {
+    if (!actor || loading) {
+      setAskWelcomeInviter('');
+      setAskWelcomeAccount('');
+      return;
+    }
+    setAskWelcomeInviter(actor);
+    setAskWelcomeAccount(actor);
+  }, [actor, loading]);
+
+  useEffect(() => {
+    if (!actor || loading || !inviteProgramStatus?.inProgram) {
+      setInviteRequests([]);
+      setInviteRequestsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setInviteRequestsLoading(true);
+    fetchEasyInviteRequests()
+      .then((rows) => {
+        if (!cancelled) setInviteRequests(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setInviteRequests([]);
+      })
+      .finally(() => {
+        if (!cancelled) setInviteRequestsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [actor, loading, inviteProgramStatus?.inProgram, chainReadEpoch]);
+
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -692,7 +760,9 @@ const Index = () => {
       const result = await transact(actions);
       const txId = extractBroadcastTxId(result);
       const message =
-        label === 'Welcome program' ? `${label} sent.` : `${label} sent for ${selectedToken.symbol}.`;
+        label === 'Welcome program' || label === 'Request a welcome'
+          ? `${label} sent.`
+          : `${label} sent for ${selectedToken.symbol}.`;
       const baseOpts = { duration: BROADCAST_SUCCESS_TOAST_MS };
 
       if (txId) {
@@ -970,6 +1040,35 @@ const Index = () => {
     ]);
   };
 
+  const requestWelcome = () => {
+    const requester = askWelcomeInviter.trim().toLowerCase();
+    const account = askWelcomeAccount.trim().toLowerCase();
+    if (!isLoggedIn || !actor) {
+      toast.error('Connect a wallet first.');
+      return;
+    }
+    if (inviteProgramStatus?.inProgram) {
+      toast.error('You are already in the Welcome Program.');
+      return;
+    }
+    if (!EASY_INVITE_ACCOUNT_RE.test(requester) || !EASY_INVITE_ACCOUNT_RE.test(account)) {
+      toast.error('Enter valid XPR account names.');
+      return;
+    }
+    if (requester !== actor) {
+      toast.error('Requester must match your connected wallet.');
+      return;
+    }
+
+    submitAction('Request a welcome', [
+      {
+        account: EASY_INVITE_CONTRACT,
+        name: 'ask4invite',
+        data: { account, requester },
+      },
+    ]);
+  };
+
   return (
     <div className="min-h-screen overflow-hidden bg-black text-yellow-50">
       <Header
@@ -1168,7 +1267,7 @@ const Index = () => {
                     <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
                       <div className="space-y-2">
                         <Label htmlFor="reward-pool" className="text-yellow-100/80">
-                          Reward pool
+                          Flexible Reward Token
                         </Label>
                         {poolsLoaded ? (
                           <Select
@@ -1974,6 +2073,10 @@ const Index = () => {
                     against total banked in <code className={codeInlineClass}>inbank.mon3y</code>. A busier downstream
                     pushes your invite score into higher multipliers.
                   </p>
+                  <p className="text-xs text-yellow-100/45">
+                    Quick read: hitting {TETRAHEDRAL_LEVELS[0]}, {TETRAHEDRAL_LEVELS[1]}, {TETRAHEDRAL_LEVELS[2]} invites
+                    moves you from 1x to 2x to 3x.
+                  </p>
                 </div>
               )}
 
@@ -1992,6 +2095,170 @@ const Index = () => {
         </SnapSection>
 
         <SnapSection
+          id="easy-life-status"
+          eyebrow="Program status"
+          title="Your Welcome Program status"
+        >
+          <GlassCard className="w-full max-w-7xl p-5 sm:p-6">
+            <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+              <div className="rounded-[1.5rem] border border-yellow-300/15 bg-black/55 p-5">
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300">Current account</p>
+                <h3 className="mt-3 text-2xl font-black text-yellow-50 sm:text-3xl">
+                  {loading ? 'Checking...' : actor ?? 'Connect wallet'}
+                </h3>
+
+                <div className="mt-5 rounded-[1.25rem] border border-yellow-300/20 bg-yellow-300/[0.06] p-4 text-center">
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-200/80">Program state</p>
+                  <p
+                    className={cn(
+                      'mt-2 text-4xl font-black tracking-wide sm:text-5xl',
+                      inviteProgramStatus?.inProgram ? 'text-emerald-300' : 'text-rose-300'
+                    )}
+                  >
+                    {inviteProgramLoading
+                      ? 'CHECKING'
+                      : !actor
+                        ? 'NO WALLET'
+                        : inviteProgramStatus?.inProgram
+                          ? 'IN'
+                          : 'OUT'}
+                  </p>
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <Metric
+                    value={
+                      inviteProgramLoading
+                        ? '...'
+                        : inviteProgramStatus?.inProgram
+                          ? String(inviteProgramStatus.score)
+                          : '0'
+                    }
+                    label="Current score"
+                  />
+                  <Metric
+                    value={
+                      inviteProgramLoading
+                        ? '...'
+                        : inviteProgramStatus?.inProgram && inviteProgramStatus.rank
+                          ? `#${inviteProgramStatus.rank}`
+                          : '—'
+                    }
+                    label="Current rank"
+                  />
+                  <Metric
+                    compact
+                    value={
+                      inviteProgramLoading
+                        ? '...'
+                        : inviteProgramStatus?.inProgram
+                          ? formatFlexAssetPretty(inviteProgramStatus.banked)
+                          : '0 EASY'
+                    }
+                    label="Banked EASY"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-yellow-300/15 bg-black/55 p-5">
+                {inviteProgramStatus?.inProgram ? (
+                  <>
+                    <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300">
+                      Pending welcome requests
+                    </p>
+                    <h3 className="mt-3 text-2xl font-black text-yellow-50">Accounts waiting for a welcome</h3>
+                    <p className="mt-3 text-sm leading-7 text-yellow-100/65">
+                      From <code className={codeInlineClass}>invite.mon3y</code> queue (
+                      <code className={codeInlineClass}>invrequests</code>). Welcome the oldest next with a paid
+                      transfer memo starting with <code className={codeInlineClass}>*|</code>.
+                    </p>
+                    {inviteRequestsLoading ? (
+                      <p className="mt-4 text-sm text-yellow-100/55">Loading queue…</p>
+                    ) : inviteRequests.length === 0 ? (
+                      <p className="mt-4 text-sm text-yellow-100/55">No pending requests right now.</p>
+                    ) : (
+                      <div className="mt-4 max-h-72 overflow-auto rounded-xl border border-yellow-300/15">
+                        <table className="w-full text-left text-sm">
+                          <thead className="sticky top-0 bg-yellow-300/10 text-xs uppercase tracking-[0.16em] text-yellow-200">
+                            <tr>
+                              <th className="px-3 py-2">Account</th>
+                              <th className="px-3 py-2">Requester</th>
+                              <th className="px-3 py-2">Requested</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-yellow-300/10 text-yellow-100/75">
+                            {inviteRequests.map((row) => (
+                              <tr key={row.account}>
+                                <td className="px-3 py-2 font-mono">{row.account}</td>
+                                <td className="px-3 py-2 font-mono">{row.requester}</td>
+                                <td className="px-3 py-2 text-yellow-100/55">
+                                  {row.requestedAt
+                                    ? new Date(row.requestedAt * 1000).toLocaleString()
+                                    : '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300">Request a welcome</p>
+                    <h3 className="mt-3 text-2xl font-black text-yellow-50">Join the invite queue</h3>
+                    <p className="mt-3 text-sm leading-7 text-yellow-100/65">
+                      Submits <code className={codeInlineClass}>invite.mon3y::ask4invite</code> on-chain. Someone can
+                      later welcome you with a paid transfer using memo prefix{' '}
+                      <code className={codeInlineClass}>*|</code>.
+                    </p>
+                    <div className="mt-4 grid gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="ask-welcome-inviter" className="text-yellow-100/80">
+                          Inviter (requester)
+                        </Label>
+                        <Input
+                          id="ask-welcome-inviter"
+                          value={askWelcomeInviter}
+                          onChange={(event) => setAskWelcomeInviter(event.target.value.toLowerCase())}
+                          placeholder="accountname"
+                          className="border-yellow-300/20 bg-black/70 font-mono text-yellow-50"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="ask-welcome-account" className="text-yellow-100/80">
+                          Account to welcome
+                        </Label>
+                        <Input
+                          id="ask-welcome-account"
+                          value={askWelcomeAccount}
+                          onChange={(event) => setAskWelcomeAccount(event.target.value.toLowerCase())}
+                          placeholder="accountname"
+                          className="border-yellow-300/20 bg-black/70 font-mono text-yellow-50"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={requestWelcome}
+                      disabled={
+                        !isLoggedIn ||
+                        submitting !== null ||
+                        inviteProgramLoading ||
+                        inviteProgramStatus?.inProgram === true
+                      }
+                      className="mt-4 w-full bg-yellow-300 text-black hover:bg-yellow-200 disabled:opacity-40"
+                    >
+                      {submitting === 'Request a welcome' ? 'Submitting…' : 'Request a welcome'}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          </GlassCard>
+        </SnapSection>
+
+        <SnapSection
           id="easy-life-branch"
           eyebrow="Welcome network"
           title="Branch out + Bag more Fruit"
@@ -1999,7 +2266,7 @@ const Index = () => {
           <GlassCard className="w-full max-w-7xl p-4 sm:p-6">
             <p className="max-w-3xl text-base leading-7 text-yellow-100/65">
               View your network on <code className={codeInlineClass}>invite.mon3y</code> — who you welcomed and who
-              they welcomed downstream. Load another edge when you are ready; each click is one chain pass.
+              they welcomed downstream. Load edges, explore accounts, when you are ready; each click is one chain pass.
             </p>
             <div className="mt-6">
               <EasyLifeBranchTree rootAccount={actor} />
@@ -2190,10 +2457,25 @@ function StatLink({ label, value, href }: { label: string; value: string; href: 
   );
 }
 
-function Metric({ value, label }: { value: string; label: string }) {
+function Metric({
+  value,
+  label,
+  compact,
+}: {
+  value: string;
+  label: string;
+  compact?: boolean;
+}) {
   return (
-    <div className="rounded-[1.5rem] border border-yellow-300/15 bg-yellow-300/[0.05] p-5">
-      <div className="text-4xl font-black text-yellow-300">{value}</div>
+    <div className="rounded-[1.5rem] border border-yellow-300/15 bg-yellow-300/[0.05] p-4 sm:p-5">
+      <div
+        className={cn(
+          'font-black text-yellow-300 break-words',
+          compact ? 'text-lg leading-tight sm:text-xl' : 'text-4xl'
+        )}
+      >
+        {value}
+      </div>
       <div className="mt-2 text-sm uppercase tracking-[0.18em] text-yellow-100/55">{label}</div>
     </div>
   );

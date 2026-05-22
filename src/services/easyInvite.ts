@@ -18,6 +18,28 @@ export type EasyInviteAdopter = {
   lastupdated: number;
 };
 
+export type EasyInviteProgramStatus = {
+  account: string;
+  inProgram: boolean;
+  score: number;
+  banked: string;
+  rank: number | null;
+  totalMembers: number;
+  invitedby: string;
+};
+
+export type EasyInviteRequest = {
+  account: string;
+  requester: string;
+  requestedAt: number;
+};
+
+type InviteRequestRow = {
+  account?: string;
+  requester?: string;
+  requested_at?: number;
+};
+
 type GetAccountResponse = {
   account_name?: string;
   message?: string;
@@ -153,6 +175,64 @@ export async function fetchEasyInviteAdopter(account: string): Promise<EasyInvit
   throw lastError ?? new Error('Unable to load adopter row.');
 }
 
+export async function fetchEasyInviteProgramStatus(account: string): Promise<EasyInviteProgramStatus> {
+  const normalized = account.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error('Account is required.');
+  }
+  let lastError: Error | null = null;
+  for (const endpoint of CHAIN_ENDPOINTS) {
+    try {
+      let lowerBound: string | undefined;
+      const allRows: EasyInviteAdopter[] = [];
+      for (;;) {
+        const page = await fetchAdoptersPage(endpoint, lowerBound);
+        allRows.push(...page.rows);
+        if (!page.more) break;
+        if (page.nextKey !== undefined) {
+          lowerBound = page.nextKey;
+          continue;
+        }
+        const last = page.rows[page.rows.length - 1];
+        if (!last) break;
+        lowerBound = last.account;
+      }
+
+      allRows.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.account.localeCompare(b.account);
+      });
+
+      const idx = allRows.findIndex((row) => row.account === normalized);
+      if (idx < 0) {
+        return {
+          account: normalized,
+          inProgram: false,
+          score: 0,
+          banked: '0.000000 EASY',
+          rank: null,
+          totalMembers: allRows.length,
+          invitedby: '',
+        };
+      }
+
+      const self = allRows[idx];
+      return {
+        account: normalized,
+        inProgram: true,
+        score: self.score,
+        banked: self.banked,
+        rank: idx + 1,
+        totalMembers: allRows.length,
+        invitedby: self.invitedby,
+      };
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+  throw lastError ?? new Error('Unable to load program status.');
+}
+
 /**
  * One paginated pass over `adopters`; returns direct invitees for each account in `inviters`.
  */
@@ -188,4 +268,75 @@ export async function fetchEasyInviteesByInviters(
     }
   }
   throw lastError ?? new Error('Unable to load invite connections.');
+}
+
+function parseInviteRequestRow(row: InviteRequestRow): EasyInviteRequest | null {
+  const account = row.account?.trim();
+  if (!account) return null;
+  return {
+    account,
+    requester: row.requester?.trim() ?? '',
+    requestedAt: typeof row.requested_at === 'number' ? row.requested_at : 0,
+  };
+}
+
+async function fetchInviteRequestsPage(
+  endpoint: string,
+  lowerBound?: string
+): Promise<{ rows: EasyInviteRequest[]; more: boolean; nextKey?: string }> {
+  const body: Record<string, unknown> = {
+    json: true,
+    code: EASY_INVITE_CONTRACT,
+    scope: EASY_INVITE_CONTRACT,
+    table: 'invrequests',
+    limit: 500,
+  };
+  if (lowerBound !== undefined) body.lower_bound = lowerBound;
+
+  const res = await fetch(`${endpoint}/v1/chain/get_table_rows`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => ({}))) as GetTableRowsResponse & {
+    rows?: InviteRequestRow[];
+  };
+  if (!res.ok) throw new Error(data.message || `Invite requests read failed (${res.status})`);
+
+  const rows = (data.rows ?? [])
+    .map(parseInviteRequestRow)
+    .filter((row): row is EasyInviteRequest => row !== null);
+
+  return {
+    rows,
+    more: Boolean(data.more),
+    nextKey: data.next_key !== undefined && data.next_key !== null ? String(data.next_key) : undefined,
+  };
+}
+
+/** All rows in `invrequests` (FIFO welcome queue). */
+export async function fetchEasyInviteRequests(): Promise<EasyInviteRequest[]> {
+  let lastError: Error | null = null;
+  for (const endpoint of CHAIN_ENDPOINTS) {
+    try {
+      const allRows: EasyInviteRequest[] = [];
+      let lowerBound: string | undefined;
+      for (;;) {
+        const page = await fetchInviteRequestsPage(endpoint, lowerBound);
+        allRows.push(...page.rows);
+        if (!page.more) break;
+        if (page.nextKey !== undefined) {
+          lowerBound = page.nextKey;
+          continue;
+        }
+        const last = page.rows[page.rows.length - 1];
+        if (!last) break;
+        lowerBound = last.account;
+      }
+      return allRows.sort((a, b) => a.requestedAt - b.requestedAt);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+  throw lastError ?? new Error('Unable to load invite requests.');
 }
