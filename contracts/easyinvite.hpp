@@ -124,6 +124,8 @@ public:
     return ac.balance;
   }
 
+  static string format_whole_amount(const asset& a);
+
 private:
   TABLE account {
     asset    balance;

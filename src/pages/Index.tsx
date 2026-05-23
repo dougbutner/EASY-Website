@@ -51,7 +51,6 @@ import {
   type EasyInviteProgramStatus,
   type EasyInviteRequest,
 } from '@/services/easyInvite';
-import { formatFlexAssetPretty } from '@/services/flexFlexerBalance';
 import { fetchBridgeEasySnapshot, type BridgeEasySnapshot } from '@/services/easyBalance';
 import { signUnbroadcastWebAuthTransaction, isStorexWebAuthSigner } from '@/services/walletSessions';
 import {

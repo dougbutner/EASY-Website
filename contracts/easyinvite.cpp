@@ -11,10 +11,12 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
   const symbol invite_symbol = cfg.min_invite_amount.symbol;
   const asset zero_invite = asset(0, invite_symbol);
 
-  check(get_first_receiver() == cfg.token_contract, "Only configured invite token issuer is accepted");
-  check(quantity.symbol == invite_symbol, "Only configured invite token is accepted");
+  check(get_first_receiver() == cfg.token_contract, "❇️ Only configured invite token issuer is accepted");
+  check(quantity.symbol == invite_symbol, "❇️ Only EASY (mon3y) is accepted");
   check(quantity.amount > 0, "Invite transfer must be positive");
-  check(memo.find('|') != string::npos, "Invite memo must contain |");
+  if (from == cfg.inbank_account) return;
+
+  check(memo.find('|') != string::npos, "❇️ Invite memo must contain '|' as account|Welcome Message");
 
   check(cfg.enabled, "❇️ Sorry, registration is paused right now");
   check(cfg.min_invite_amount.amount > 0, "Configured minimum invite amount must be positive");
@@ -22,15 +24,11 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
 
   name invited_account;
   string forward_memo;
+  bool from_queue = false;
   const string queue_prefix = "*|";
   if (memo.size() >= queue_prefix.size() && memo.compare(0, queue_prefix.size(), queue_prefix) == 0) {
-    invite_requests_table requests(get_self(), get_self().value);
-    auto by_time = requests.get_index<"bytime"_n>();
-    auto oldest = by_time.begin();
-    check(oldest != by_time.end(), "No pending invite requests");
-    invited_account = oldest->account;
+    from_queue = true;
     forward_memo = memo.substr(queue_prefix.size());
-    by_time.erase(oldest);
   } else {
     const size_t memo_split = memo.find('|');
     check(memo_split != string::npos && memo_split > 0, "Memo must begin with the invited account");
@@ -39,9 +37,28 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
     check(is_account(invited_account), "Invited account does not exist");
     forward_memo = memo.substr(memo_split + 1);
   }
+  adopters_table adopters(get_self(), get_self().value);
+
+  if (from_queue) {
+    invite_requests_table requests(get_self(), get_self().value);
+    auto by_time = requests.get_index<"bytime"_n>();
+    auto oldest = by_time.begin();
+    while (oldest != by_time.end() && adopters.find(oldest->account.value) != adopters.end()) {
+      by_time.erase(oldest);
+      oldest = by_time.begin();
+    }
+    check(oldest != by_time.end(), "No pending invite requests");
+    invited_account = oldest->account;
+  }
+
   check(invited_account != from, "❇️ You can't invite yourself");
 
-  adopters_table adopters(get_self(), get_self().value);
+  if (adopters.find(invited_account.value) != adopters.end()) {
+    const int64_t min_amount = cfg.min_invite_amount.amount;
+    const asset min_rewelcome_amount(min_amount * 5, invite_symbol);
+    check(quantity >= min_rewelcome_amount, "❇️ Welcome Back requires 5x the minimum invite amount");
+  }
+
   stats_table stats(get_self(), get_self().value);
   auto current_stats = stats.get_or_default();
   const uint32_t now = current_time_point().sec_since_epoch();
@@ -52,6 +69,7 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
       return false;
     }
 
+    // New users invited via reflections (or contract) get that account as invitedby
     adopters.emplace(get_self(), [&](auto& row) {
       row.account = account;
       row.invitedby = invitedby;
@@ -65,26 +83,49 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
     return true;
   };
 
-  name inviter = adopters.find(from.value) == adopters.end() ? cfg.reflections_account : from;
-  if (adopters.find(inviter.value) == adopters.end()) {
-    register_adopter_if_missing(inviter, get_self());
+  const bool payer_is_registered = adopters.find(from.value) != adopters.end();
+  name inviter_for_chain = payer_is_registered ? from : cfg.reflections_account;
+
+  if (adopters.find(inviter_for_chain.value) == adopters.end()) {
+    register_adopter_if_missing(inviter_for_chain, get_self());
   }
 
-  check(register_adopter_if_missing(invited_account, inviter), "❇️ You're already registered with us");
+  auto invited_itr = adopters.find(invited_account.value);
+  const bool already_in_program = invited_itr != adopters.end();
+  const bool welcomed_now = !already_in_program && register_adopter_if_missing(invited_account, inviter_for_chain);
 
-  auto inviter_itr = adopters.find(inviter.value);
-  uint16_t current_level = 1;
-  while (inviter_itr != adopters.end() && current_level <= cfg.max_invite_depth) {
-    auto account_itr = inviter_itr;
-    const name next_inviter = inviter_itr->invitedby;
-    adopters.modify(account_itr, same_payer, [&](auto& row) {
-      row.score += 1;
+  if (already_in_program) {
+    adopters.modify(invited_itr, same_payer, [&](auto& row) {
+      row.invitedby = inviter_for_chain;
       row.lastupdated = now;
     });
-    current_stats.total_invite_score += 1;
-    if (next_inviter == name{}) break;
-    inviter_itr = adopters.find(next_inviter.value);
-    current_level += 1;
+  }
+
+  invite_requests_table requests(get_self(), get_self().value);
+  auto pending_request = requests.find(invited_account.value);
+  if (pending_request != requests.end()) {
+    requests.erase(pending_request);
+  }
+
+  if (!payer_is_registered) {
+    register_adopter_if_missing(from, get_self());
+  }
+
+  if (welcomed_now) {
+    auto inviter_itr = adopters.find(inviter_for_chain.value);
+    uint16_t current_level = 1;
+    while (inviter_itr != adopters.end() && current_level <= cfg.max_invite_depth) {
+      auto account_itr = inviter_itr;
+      const name next_inviter = inviter_itr->invitedby;
+      adopters.modify(account_itr, same_payer, [&](auto& row) {
+        row.score += 1;
+        row.lastupdated = now;
+      });
+      current_stats.total_invite_score += 1;
+      if (next_inviter == name{}) break;
+      inviter_itr = adopters.find(next_inviter.value);
+      current_level += 1;
+    }
   }
 
   // === FIXED: 50/50 Split (prevents token loss) ===
@@ -92,8 +133,8 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
   asset banked_amount(half, quantity.symbol);
   asset forwarded_amount = quantity - banked_amount;
 
-  auto banked_inviter_itr = adopters.find(inviter.value);
-  check(banked_inviter_itr != adopters.end(), "Banked inviter is not registered");
+  auto banked_inviter_itr = adopters.find(from.value);
+  check(banked_inviter_itr != adopters.end(), "Banked payer is not registered");
 
   adopters.modify(banked_inviter_itr, same_payer, [&](auto& row) {
     row.banked += banked_amount;
@@ -106,7 +147,8 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
     permission_level{get_self(), "active"_n},
     cfg.token_contract,
     "transfer"_n,
-    std::make_tuple(get_self(), cfg.inbank_account, banked_amount, std::string("paid invite"))
+    std::make_tuple(get_self(), cfg.inbank_account, banked_amount,
+      from.to_string() + " welcomes " + invited_account.to_string())
   ).send();
 
   // Forward to new user
@@ -131,7 +173,7 @@ void easyinvite::ask4invite(name account, name requester) {
   check(cfg.enabled, "❇️ Sorry, registration is paused right now");
 
   adopters_table adopters(get_self(), get_self().value);
-  check(adopters.find(account.value) == adopters.end(), "❇️ This account is already registered");
+  check(adopters.find(account.value) == adopters.end(), "❇️ This account has already been welcomed");
 
   invite_requests_table requests(get_self(), get_self().value);
   check(requests.find(account.value) == requests.end(), "This account already has a pending invite request");
@@ -142,6 +184,14 @@ void easyinvite::ask4invite(name account, name requester) {
     row.requested_at = current_time_point().sec_since_epoch();
   });
 }//END ask4invite()
+
+string easyinvite::format_whole_amount(const asset& a) {
+  int64_t unit = 1;
+  for (uint8_t i = 0; i < a.symbol.precision(); i++) {
+    unit *= 10;
+  }
+  return std::to_string(a.amount / unit) + " " + a.symbol.code().to_string();
+}
 
 // === Claim Reward === //
 // --- Pays EASY rewards for a configured page of adopters --- //
@@ -205,12 +255,17 @@ void easyinvite::claimreward() {
     asset reward = asset(reward_amount, invite_symbol);
     distributed += reward_amount;
 
+    const asset weighted = asset(static_cast<int64_t>(weighted_amount), invite_symbol);
+    const string reward_memo = "EASY Life 🍹 Level " + std::to_string(position) +
+      " 🏆 " + std::to_string(current->score) +
+      " 🏦 " + format_whole_amount(current->banked) +
+      " ⚖️💰 " + format_whole_amount(weighted) + " 🖱 flex.town";
+
     action(
       permission_level{get_self(), "active"_n},
       cfg.token_contract,
       "transfer"_n,
-      std::make_tuple(get_self(), current->account, reward, 
-        std::string("❇️ Level " + std::to_string(position) + " reward! Thanks for living the EASY life with us ❇️"))
+      std::make_tuple(get_self(), current->account, reward, reward_memo)
     ).send();
 
     current_stats.total_rewards_distributed += reward;
