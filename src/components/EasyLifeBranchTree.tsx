@@ -72,9 +72,16 @@ function countNodes(root: InviteTreeDatum): number {
 type EasyLifeBranchTreeProps = {
   rootAccount: string | null;
   className?: string;
+  actor?: string | null;
+  onWelcomeBackBranch?: (account: string) => void;
 };
 
-export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTreeProps) {
+export function EasyLifeBranchTree({
+  rootAccount,
+  className,
+  actor,
+  onWelcomeBackBranch,
+}: EasyLifeBranchTreeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -89,6 +96,7 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
   const [loadedInviters, setLoadedInviters] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const normalizedActor = actor?.trim().toLowerCase() ?? null;
 
   const treeData = useMemo(() => {
     if (!activeRootAccount || branchDepth < 1) return null;
@@ -312,12 +320,25 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
 
     const expandable = (d: d3.HierarchyPointNode<InviteTreeDatum>) =>
       d.data.score > 1 && !loadedInviters.has(d.data.account);
+    const welcomeBackTarget = (d: d3.HierarchyPointNode<InviteTreeDatum>) =>
+      Boolean(
+        onWelcomeBackBranch &&
+          !expandable(d) &&
+          loadedInviters.has(d.data.account) &&
+          d.data.children.length > 0 &&
+          d.data.account !== normalizedActor
+      );
 
     node
-      .style('cursor', (d) => (expandable(d) ? 'pointer' : 'default'))
+      .style('cursor', (d) => (expandable(d) || welcomeBackTarget(d) ? 'pointer' : 'default'))
       .on('click', (_, d) => {
-        if (!expandable(d)) return;
-        void loadSingleEdge(d.data.account, d.depth);
+        if (expandable(d)) {
+          void loadSingleEdge(d.data.account, d.depth);
+          return;
+        }
+        if (welcomeBackTarget(d)) {
+          onWelcomeBackBranch?.(d.data.account);
+        }
       });
 
     node
@@ -329,6 +350,18 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
       .attr('font-size', 10)
       .attr('font-weight', 700)
       .text('+');
+
+    node
+      .append('text')
+      .filter((d) => welcomeBackTarget(d))
+      .attr('dy', '0.35em')
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#facc15')
+      .attr('font-size', 10)
+      .attr('font-weight', 800)
+      .text('$')
+      .append('title')
+      .text((d) => `Welcome Back ${d.data.account}'s downstream`);
 
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
@@ -342,7 +375,7 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
     return () => {
       d3.select(svg).on('.zoom', null);
     };
-  }, [treeData, upstreamAdopter, loadedInviters, loadSingleEdge]);
+  }, [treeData, upstreamAdopter, loadedInviters, loadSingleEdge, normalizedActor, onWelcomeBackBranch]);
 
   return (
     <div className={cn('space-y-4', className)}>
@@ -397,7 +430,9 @@ export function EasyLifeBranchTree({ rootAccount, className }: EasyLifeBranchTre
           <div className="flex min-h-[320px] flex-col items-center justify-center gap-2 px-6 text-center text-sm text-yellow-100/45">
             <p>Your downstream welcomes appear here after you load a branch.</p>
             <p className="text-xs">
-              Each &quot;Load next edge&quot; adds one more hop. Nodes with score &gt; 1 show a <span className="text-yellow-300">+</span> to load their downstream.
+              Each &quot;Load next edge&quot; adds one more hop. <span className="text-yellow-300">+</span> loads a hidden
+              downstream; <span className="text-yellow-300">$</span> opens a 1000 EASY Welcome Back for a displayed
+              branch.
             </p>
           </div>
         )}

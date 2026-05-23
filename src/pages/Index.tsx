@@ -1,7 +1,7 @@
 /**
  * Index page — EASY one-page snap-scroll landing and token tools.
  */
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EasyLifeBranchTree } from '@/components/EasyLifeBranchTree';
 import { EasyLifeShareBar } from '@/components/EasyLifeShareBar';
 import { Header } from '@/components/Header';
@@ -369,7 +369,9 @@ const BRIDGE_WITHDRAW_QUOTE_ID = 'FIXED';
 /** Shown in UI; XPR → Solana bridge fee (EASY). */
 const BRIDGE_FEE_XPR_TO_SOLANA_EASY = 25;
 const EASY_INVITE_ACCOUNT_RE = /^[a-z1-5.]{1,12}$/;
-const EASY_INVITE_DEFAULT_MEMO = 'Welcome to the EASY Life';
+const EASY_INVITE_DEFAULT_MEMO = 'Welcome to the EASY Life 🍹';
+const EASY_REWELCOME_AMOUNT = EASY_INVITE_MIN_AMOUNT * 5;
+const EASY_REWELCOME_MEMO = 'Welcome Back 🍹';
 const TETRAHEDRAL_LEVELS = [1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364] as const;
 
 function tokenLogoUrl(token: TokenConfig, wonRandom: string): string {
@@ -577,7 +579,7 @@ const Index = () => {
     return () => {
       cancelled = true;
     };
-  }, [chainReadEpoch, tokens]);
+  }, [chainReadEpoch]);
 
   const poolRows = poolsByContract[selectedToken.contract] ?? [];
   const poolsLoaded = poolRows.length > 0;
@@ -748,7 +750,7 @@ const Index = () => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const submitAction = async (label: string, actions: FlexAction[]) => {
+  const submitAction = useCallback(async (label: string, actions: FlexAction[]) => {
     if (!isLoggedIn || !actor) {
       toast.error('Connect a wallet first.');
       return;
@@ -759,7 +761,7 @@ const Index = () => {
       const result = await transact(actions);
       const txId = extractBroadcastTxId(result);
       const message =
-        label === 'Welcome program' || label === 'Request a welcome'
+        label === 'Welcome program' || label === 'Request a welcome' || label === 'Welcome Back'
           ? `${label} sent.`
           : `${label} sent for ${selectedToken.symbol}.`;
       const baseOpts = { duration: BROADCAST_SUCCESS_TOAST_MS };
@@ -789,7 +791,7 @@ const Index = () => {
     } finally {
       setSubmitting(null);
     }
-  };
+  }, [actor, isLoggedIn, selectedToken.symbol, transact]);
 
   const sendRewards = () =>
     submitAction('Send rewards', [
@@ -1038,6 +1040,35 @@ const Index = () => {
       },
     ]);
   };
+
+  const sendWelcomeBackBranch = useCallback((account: string) => {
+    const target = account.trim().toLowerCase();
+    if (!isLoggedIn || !actor) {
+      toast.error('Connect a wallet first.');
+      return;
+    }
+    if (!EASY_INVITE_ACCOUNT_RE.test(target)) {
+      toast.error('That branch account is not a valid XPR account.');
+      return;
+    }
+    if (target === actor) {
+      toast.error('You cannot Welcome Back your own account.');
+      return;
+    }
+
+    submitAction('Welcome Back', [
+      {
+        account: EASY_INVITE_TOKEN_CONTRACT,
+        name: 'transfer',
+        data: {
+          from: actor,
+          to: EASY_INVITE_CONTRACT,
+          quantity: `${EASY_REWELCOME_AMOUNT.toFixed(6)} EASY`,
+          memo: `${target}|${EASY_REWELCOME_MEMO}`,
+        },
+      },
+    ]);
+  }, [actor, isLoggedIn, submitAction]);
 
   const requestWelcome = () => {
     const requester = askWelcomeInviter.trim().toLowerCase();
@@ -1890,7 +1921,7 @@ const Index = () => {
           </GlassCard>
         </SnapSection>
 
-        <SnapSection id="easy-life" eyebrow="The Welcome Program" title="Welcome someone to the EASY Life.">
+        <SnapSection id="easy-life" eyebrow="The Welcome Program" title="Welcome a loved one to the EASY Life.">
           <div className="grid w-full max-w-7xl gap-5 lg:grid-cols-[0.95fr_1.05fr]">
             <GlassCard className="p-6">
               <div className="flex items-start justify-between gap-4">
@@ -1898,19 +1929,23 @@ const Index = () => {
                   <p className="text-sm font-black uppercase tracking-[0.22em] text-yellow-300">
                     The Welcome Program
                   </p>
-                  <h3 className="mt-3 text-3xl font-black text-yellow-50">Pay 200 EASY to welcome them.</h3>
+                  <h3 className="mt-3 text-3xl font-black text-yellow-50">Send 200 EASY to welcome an account.</h3>
                   <p className="mt-3 leading-7 text-yellow-100/65">
-                    Spend 100 EASY to start their wallet, and another 100 to the yielding{' '}
+                    100 EASY lifts off their wallet, and the other 100 to the yielding{' '}
                     <code className={codeInlineClass}>inbank.mon3y</code> vault. Your 200 EASY welcomes their
                     account and adds to your banked and invite scores.
                   </p>
                   <p className="mt-3 leading-7 text-yellow-100/65">
-                    If you want to earn, consider offering wallet opening as a service for greenhorns while growing
-                    your own invite score.
+                    Can one earn faster? Have you thought of offering wallet onboarding as a service for XPR
+                    greenhorns while growing your own invite score. Or you can Welcome Back any account (even{' '}
+                    <code className={codeInlineClass}>reflections</code>) for 1000 EASY, effectively paying a premium
+                    to be their upstream, earning each time they welcome until another Welcome Back occurs from the
+                    original inviter — stacking points from their networks, with 500 EASY to the networker and 500 to{' '}
+                    <code className={codeInlineClass}>inbank.mon3y</code>.
                   </p>
                   <p className="mt-3 text-sm leading-6 text-yellow-100/50">
-                    Anyone can pay a welcome for others, but if you have not been welcomed in yourself you are not
-                    credited for referral score or banked vault share — enter the program through someone else first.
+                    Anyone can welcome another account, but if you have not been welcomed yourself you are not credited
+                    any referral score or banked vault share until welcomed in.
                   </p>
                 </div>
                 <TokenThumb src={TOKEN_LOGO.EASY} alt="" className="h-14 w-14 rounded-2xl" />
@@ -1918,14 +1953,9 @@ const Index = () => {
 
               <div className="mt-6 grid gap-4">
                 <div className="space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Label htmlFor="easy-life-account" className="text-yellow-100/80">
-                      XPR account to welcome
-                    </Label>
-                    <span className="text-xs text-yellow-100/45">
-                      Checked only after blur, max once per 5 seconds.
-                    </span>
-                  </div>
+                  <Label htmlFor="easy-life-account" className="text-yellow-100/80">
+                    XPR account to welcome
+                  </Label>
                   <Input
                     id="easy-life-account"
                     value={inviteAccount}
@@ -1937,7 +1967,7 @@ const Index = () => {
                       }
                     }}
                     onBlur={() => void checkInviteAccountOnBlur()}
-                    placeholder="accountname"
+                    placeholder="Type an XPR account"
                     className="border-yellow-300/20 bg-black/70 font-mono text-yellow-50"
                   />
                   <p className="min-h-5 text-xs text-yellow-100/50">
@@ -1949,14 +1979,14 @@ const Index = () => {
                             ? 'Account exists, but is already in the program.'
                             : 'Account exists and can be welcomed.'
                           : 'Account does not exist yet. Welcome them to XPR Network first.'
-                        : 'Type an account, then leave the field to check it.'}
+                        : 'Type an XPR account'}
                   </p>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-[0.55fr_1fr]">
                   <div className="space-y-2">
                     <Label htmlFor="easy-life-amount" className="text-yellow-100/80">
-                      EASY amount
+                      EASY Welcome Package
                     </Label>
                     <Input
                       id="easy-life-amount"
@@ -1968,7 +1998,7 @@ const Index = () => {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="easy-life-memo" className="text-yellow-100/80">
-                      Message forwarded to them
+                      Message to them
                     </Label>
                     <Input
                       id="easy-life-memo"
@@ -1988,9 +2018,7 @@ const Index = () => {
                   {submitting === 'Welcome program' ? 'Opening transaction...' : 'Welcome to the EASY Life'}
                 </Button>
                 <p className="text-xs leading-relaxed text-yellow-100/45">
-                  Transaction: <code className={codeInlineClass}>mon3y::transfer</code> to{' '}
-                  <code className={codeInlineClass}>invite.mon3y</code>, quantity at least{' '}
-                  <code className={codeInlineClass}>200.000000 EASY</code>, memo{' '}
+                  Send at least 200 EASY to <code className={codeInlineClass}>invite.mon3y</code>, memo{' '}
                   <code className={codeInlineClass}>account|message</code>.
                 </p>
               </div>
@@ -2005,15 +2033,14 @@ const Index = () => {
                   </h3>
                   <p className="mt-3 leading-7 text-yellow-100/65">
                     Every person welcomed through your downstream adds to your invite score up the chain. Your score
-                    steps you up tetrahedral levels (1, 4, 10…), and that level multiplies banked EASY (
-                    <span className="font-semibold text-yellow-200/90">10 welcomes ≈ 3× rewards</span>) when vault
-                    yield is sent out.
+                    steps you up tetrahedral levels (1, 4, 10…), and that level multiplies your banked EASY for the
+                    reward from the collective pool.
                   </p>
                   <p className="mt-3 leading-7 text-yellow-100/65">
-                    A newcomer enters when another account sends them 100 EASY and donates 100 EASY to stay permanently
-                    in the inbank vault. The account that paid is credited for what they put in the vault — that
-                    banked amount later determines their share of vault yield. The welcome contract distributes inbank
-                    yield to every member of the EASY Life program.
+                    Every member donated / was welcomed with 100+ EASY to stay permanently in the inbank vault. The
+                    account that paid is credited for what they put in the vault — that banked amount later determines
+                    their share of vault yield. The <code className={codeInlineClass}>invite.mon3y</code> contract
+                    distributes inbank reflection yield to every member of the welcome program.
                   </p>
                 </div>
                 <Users className="h-10 w-10 shrink-0 text-yellow-300" />
@@ -2263,12 +2290,20 @@ const Index = () => {
           title="Branch out + Bag more Fruit"
         >
           <GlassCard className="w-full max-w-7xl p-4 sm:p-6">
-            <p className="max-w-3xl text-base leading-7 text-yellow-100/65">
+            <p className="max-w-3xl text-lg font-semibold leading-8 text-yellow-100/80">
+              When we work together, we grow together.
+            </p>
+            <p className="mt-3 max-w-3xl text-base leading-7 text-yellow-100/65">
               View your network on <code className={codeInlineClass}>invite.mon3y</code> — who you welcomed and who
-              they welcomed downstream. Load edges, explore accounts, when you are ready; each click is one chain pass.
+              they welcomed downstream. Load edges, explore accounts, even buy someone&apos;s downstream for 1000 EASY
+              (they earn 500 + you get +500 banked) when you are ready; each click is one chain pass.
             </p>
             <div className="mt-6">
-              <EasyLifeBranchTree rootAccount={actor} />
+              <EasyLifeBranchTree
+                rootAccount={actor}
+                actor={actor}
+                onWelcomeBackBranch={sendWelcomeBackBranch}
+              />
             </div>
           </GlassCard>
         </SnapSection>
