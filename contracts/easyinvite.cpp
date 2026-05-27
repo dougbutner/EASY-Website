@@ -15,6 +15,7 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
   check(quantity.symbol == invite_symbol, "❇️ Only EASY (mon3y) is accepted");
   check(quantity.amount > 0, "Invite transfer must be positive");
   if (from == cfg.inbank_account) return;
+  if (from == "hands.mon3y"_n) { easyinvite::claimreward(); return; }
 
   check(memo.find('|') != string::npos, "❇️ Invite memo must contain '|' as account|Welcome Message");
 
@@ -55,8 +56,13 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
 
   if (adopters.find(invited_account.value) != adopters.end()) {
     const int64_t min_amount = cfg.min_invite_amount.amount;
-    const asset min_rewelcome_amount(min_amount * 5, invite_symbol);
-    check(quantity >= min_rewelcome_amount, "❇️ Welcome Back requires 5x the minimum invite amount");
+    auto payer_itr = adopters.find(from.value);
+    const uint32_t payer_score = payer_itr != adopters.end() ? payer_itr->score : 0;
+    const uint32_t level = calculate_tetrahedral_position(payer_score);
+    const asset min_rewelcome_amount(min_amount * static_cast<int64_t>(level), invite_symbol);
+    check(quantity >= min_rewelcome_amount,
+      "❇️ Welcome Back (opening floodgate to " + invited_account.to_string() + "'s downstream) requires " +
+        format_whole_amount(min_rewelcome_amount));
   }
 
   stats_table stats(get_self(), get_self().value);
@@ -185,6 +191,26 @@ void easyinvite::ask4invite(name account, name requester) {
   });
 }//END ask4invite()
 
+// === Clean Invite Requests === //
+// --- Drops stale queue rows for accounts already welcomed --- //
+
+void easyinvite::cleanasks() {
+  adopters_table adopters(get_self(), get_self().value);
+  invite_requests_table requests(get_self(), get_self().value);
+  auto by_time = requests.get_index<"bytime"_n>();
+
+  uint32_t examined = 0;
+  auto itr = by_time.begin();
+  while (itr != by_time.end() && examined < 12) {
+    ++examined;
+    if (adopters.find(itr->account.value) != adopters.end()) {
+      itr = by_time.erase(itr);
+    } else {
+      ++itr;
+    }
+  }
+}//END cleanasks()
+
 string easyinvite::format_whole_amount(const asset& a) {
   int64_t unit = 1;
   for (uint8_t i = 0; i < a.symbol.precision(); i++) {
@@ -207,8 +233,7 @@ void easyinvite::claimreward() {
   const asset inbank_balance = get_balance(cfg.token_contract, cfg.inbank_account, invite_symbol.code());
   const asset contract_balance = get_balance(cfg.token_contract, get_self(), invite_symbol.code());
 
-  check(inbank_balance.amount > 0, "No banked rewards are available");
-  check(contract_balance.amount > 0, "Reward pool is zero");
+  if (contract_balance.amount < 100000000) return;
 
   const uint64_t reward_pool_amount_u = static_cast<uint64_t>(contract_balance.amount);
   const uint64_t total_banked_amount = static_cast<uint64_t>(inbank_balance.amount);

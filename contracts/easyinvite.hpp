@@ -26,6 +26,9 @@ public:
   // - Join the queue for a paid invite
   ACTION ask4invite(name account, name requester);
 
+  // - Remove stale queue rows for accounts already in adopters (oldest 12 checked)
+  ACTION cleanasks();
+
   // - Admin configuration management
   ACTION setconfig(
       name admin,
