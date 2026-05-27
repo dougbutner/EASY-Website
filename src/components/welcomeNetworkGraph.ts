@@ -235,6 +235,15 @@ export function layoutHierarchyRadial(
     .cluster<HierarchyDatum>()
     .size([2 * Math.PI, radius])
     .separation((a, b) => (a.parent === b.parent ? 2.6 : 4.5))(root);
+
+  const minInner = Math.max(40, radius * 0.09);
+  laidOut.each((d) => {
+    if (d.data.account === NETWORK_ROOT_ID) return;
+    if (d.depth === 0 || d.y < minInner) {
+      d.y = Math.max(d.y, minInner);
+    }
+  });
+
   return { root: laidOut, radius };
 }
 

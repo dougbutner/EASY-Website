@@ -4,6 +4,8 @@ export const EASY_INVITE_CONTRACT = 'invite.mon3y';
 export const EASY_INVITE_TOKEN_CONTRACT = 'mon3y';
 export const EASY_INVITE_MIN_AMOUNT = 200;
 export const EASY_REWELCOME_MEMO = 'Welcome Back 🍹';
+/** Unique downstream accounts counted for Welcome Back preview (matches on-chain capture depth). */
+export const WELCOME_BACK_DOWNSTREAM_DEPTH = 7;
 
 /** Same series as `easyinvite` contract `TETRAHEDRAL`. */
 export const TETRAHEDRAL_THRESHOLDS = [
@@ -34,6 +36,42 @@ export function tetrahedralLevelFromScore(score: number): number {
 
 export function welcomeBackMinimumEasy(score: number): number {
   return tetrahedralLevelFromScore(score) * EASY_INVITE_MIN_AMOUNT;
+}
+
+/**
+ * Unique accounts in `rootAccount`'s downstream within `maxDepth` invite hops.
+ * Each account is counted once even if Welcome Back created a loop in `invitedby`.
+ */
+export function countUniqueDownstreamFromAdopters(
+  rootAccount: string,
+  adopters: EasyInviteAdopter[],
+  maxDepth = WELCOME_BACK_DOWNSTREAM_DEPTH
+): number {
+  const root = rootAccount.trim().toLowerCase();
+  if (!root) return 0;
+
+  const childrenByInviter = new Map<string, string[]>();
+  for (const a of adopters) {
+    const inv = a.invitedby?.trim().toLowerCase();
+    if (!inv) continue;
+    if (!childrenByInviter.has(inv)) childrenByInviter.set(inv, []);
+    childrenByInviter.get(inv)!.push(a.account);
+  }
+
+  const seen = new Set<string>();
+  let frontier = [root];
+  for (let depth = 0; depth < maxDepth && frontier.length > 0; depth++) {
+    const next: string[] = [];
+    for (const id of frontier) {
+      for (const kid of childrenByInviter.get(id) ?? []) {
+        if (seen.has(kid)) continue;
+        seen.add(kid);
+        next.push(kid);
+      }
+    }
+    frontier = next;
+  }
+  return seen.size;
 }
 
 export type InviteRequestMessage = {

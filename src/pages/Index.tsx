@@ -1163,15 +1163,19 @@ const Index = () => {
     [actor, expandedInviteRequest, isLoggedIn, submitAction]
   );
 
-  const openNetworkNodeDialog = useCallback((node: { id: string; score: number; banked: string; invitedby: string }) => {
-    setExpandedInviteRequest({
-      account: node.id,
-      requester: node.invitedby,
-      message: '',
-      score: node.score,
-      banked: node.banked,
-    });
-  }, []);
+  const openNetworkNodeDialog = useCallback(
+    (node: { id: string; score: number; banked: string; invitedby: string }, downstreamCount?: number) => {
+      setExpandedInviteRequest({
+        account: node.id,
+        requester: node.invitedby,
+        message: '',
+        score: node.score,
+        banked: node.banked,
+        downstreamCount,
+      });
+    },
+    []
+  );
 
   const sendWelcomeBackBranch = useCallback(
     async (account: string) => {
@@ -2341,10 +2345,11 @@ const Index = () => {
                   />
                 </div>
                 {inviteProgramStatus?.inProgram ? (
-                  <p className="mt-4 text-sm text-yellow-100/60">
-                    Welcome Back cost is <span className="font-semibold text-yellow-200">200 EASY</span> × the{' '}
-                    <span className="font-semibold text-yellow-200">purchased account’s</span> tetrahedral level (from
-                    their invite score), not yours.
+                  <p className="mt-4 text-sm leading-relaxed text-yellow-100/60">
+                    <span className="font-semibold text-yellow-200">Welcome Back</span> captures the purchased
+                    account&apos;s downstream (unique accounts, up to 7 levels deep; loops counted once). Cost is{' '}
+                    <span className="font-semibold text-yellow-200">200 EASY</span> × their tetrahedral level from their
+                    invite score — not yours.
                   </p>
                 ) : null}
               </div>
@@ -2506,9 +2511,8 @@ const Index = () => {
               When we work together, we grow together.
             </p>
             <p className="mt-3 max-w-3xl text-base leading-7 text-yellow-100/65">
-              View your network on <code className={codeInlineClass}>invite.mon3y</code> — who you welcomed and who
-              they welcomed downstream. Load edges, explore accounts, even buy someone&apos;s downstream via Welcome Back
-              (200 EASY per tetrahedral level; 50/50 split) when you are ready; each click is one chain pass.
+              View your network on <code className={codeInlineClass}>invite.mon3y</code> — who you welcomed and who they
+              welcomed downstream. Click any dot to see their flex chest or send Welcome Back.
             </p>
             <div className="mt-6">
               <EasyLifeBranchTree

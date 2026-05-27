@@ -19,6 +19,9 @@ import {
 import {
   EASY_INVITE_MIN_AMOUNT,
   EASY_REWELCOME_MEMO,
+  WELCOME_BACK_DOWNSTREAM_DEPTH,
+  countUniqueDownstreamFromAdopters,
+  fetchAllEasyInviteAdopters,
   fetchEasyInviteAccountStatus,
   tetrahedralLevelFromScore,
   welcomeBackMinimumEasy,
@@ -33,6 +36,8 @@ export type InviteQueueRequestDetail = {
   /** Preloaded from `adopters` table when opening from the network graph. */
   score?: number;
   banked?: string;
+  /** When set, skips a second full-table read for downstream count. */
+  downstreamCount?: number;
 };
 
 const EASY_INVITE_DEFAULT_MEMO = 'Welcome to the EASY Life 🍹';
@@ -68,6 +73,8 @@ export function InviteQueueRequestDialog({
   const [accountChecking, setAccountChecking] = useState(false);
   const [chestBalances, setChestBalances] = useState<FlexChestBalances | null>(null);
   const [chestLoading, setChestLoading] = useState(false);
+  const [downstreamCount, setDownstreamCount] = useState<number | null>(null);
+  const [downstreamLoading, setDownstreamLoading] = useState(false);
   const wonLogoUrl = useMemo(() => pickRandomWonVariant(), []);
 
   const inviteScore = detail?.score ?? 0;
@@ -79,6 +86,7 @@ export function InviteQueueRequestDialog({
     if (!detail) {
       setAccountStatus(null);
       setChestBalances(null);
+      setDownstreamCount(null);
       return;
     }
 
@@ -118,6 +126,40 @@ export function InviteQueueRequestDialog({
       })
       .finally(() => {
         if (!cancelled) setChestLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detail]);
+
+  useEffect(() => {
+    if (!detail) {
+      setDownstreamCount(null);
+      setDownstreamLoading(false);
+      return;
+    }
+
+    const account = detail.account.trim().toLowerCase();
+    if (detail.downstreamCount !== undefined) {
+      setDownstreamCount(detail.downstreamCount);
+      setDownstreamLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setDownstreamLoading(true);
+    void fetchAllEasyInviteAdopters()
+      .then((adopters) => {
+        if (!cancelled) {
+          setDownstreamCount(countUniqueDownstreamFromAdopters(account, adopters));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDownstreamCount(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDownstreamLoading(false);
       });
 
     return () => {
@@ -213,7 +255,7 @@ export function InviteQueueRequestDialog({
             )}
 
             <div className="space-y-2">
-              <Label className="text-yellow-100/80">Flex chest (requesting account)</Label>
+              <Label className="text-yellow-100/80">Flex chest</Label>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {FLEX_CHEST_TOKENS.map(({ symbol }) => {
                   const logo =
@@ -249,11 +291,36 @@ export function InviteQueueRequestDialog({
                 : accountStatus?.account === account
                   ? accountStatus.exists
                     ? accountStatus.registered
-                      ? `In the Welcome Program · Welcome Back from ${welcomeBackMin} EASY (level ${tetraLevel}).`
+                      ? 'Already in the Welcome Program — Welcome Back captures their downstream.'
                       : 'Account exists and can be welcomed.'
                     : 'Account does not exist on XPR Network yet.'
                   : 'Account check pending…'}
             </p>
+
+            {isRegistered ? (
+              <div className="space-y-2 rounded-md border border-yellow-300/25 bg-yellow-300/[0.07] px-3 py-3">
+                <p className="text-sm font-semibold leading-relaxed text-yellow-50">
+                  Welcome Back captures their downstream
+                </p>
+                <p className="text-sm leading-relaxed text-yellow-100/70">
+                  You become their upstream on-chain. We count{' '}
+                  <span className="font-semibold text-yellow-200">unique</span> accounts they welcomed, up to{' '}
+                  <span className="font-semibold text-yellow-200">{WELCOME_BACK_DOWNSTREAM_DEPTH} levels</span> deep
+                  (each account once, even if Welcome Back formed a loop).
+                </p>
+                <p className="font-mono text-base font-bold text-yellow-200">
+                  {downstreamLoading
+                    ? 'Counting downstream…'
+                    : downstreamCount !== null
+                      ? `Capture the downstream of ${downstreamCount} account${downstreamCount === 1 ? '' : 's'} for ${welcomeBackMin} EASY`
+                      : `Capture their downstream for ${welcomeBackMin} EASY`}
+                </p>
+                <p className="text-xs text-yellow-100/45">
+                  {welcomeBackMin} EASY = 200 × tetrahedral level {tetraLevel} (from their invite score of{' '}
+                  {inviteScore}).
+                </p>
+              </div>
+            ) : null}
 
             <div className="grid gap-3 sm:grid-cols-[0.55fr_1fr]">
               <div className="space-y-2">

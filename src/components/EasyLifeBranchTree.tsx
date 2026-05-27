@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   fetchAllEasyInviteAdopters,
+  countUniqueDownstreamFromAdopters,
   fetchEasyInviteAdopter,
   fetchEasyInviteesByInviters,
   welcomeBackMinimumEasy,
@@ -115,13 +116,17 @@ function levelByAccountMap(graph: WelcomeNetworkGraph): Map<string, number> {
 
 function wireNetworkNodeClick(
   node: d3.Selection<SVGGElement, WelcomeNetworkNode, SVGGElement, unknown>,
-  onSelect: (n: WelcomeNetworkNode) => void
+  onSelect: (n: WelcomeNetworkNode, downstreamCount?: number) => void,
+  adoptersForCount: EasyInviteAdopter[] | null
 ) {
   node
     .style('cursor', 'pointer')
     .on('click', (event, d) => {
       event.stopPropagation();
-      onSelect(d);
+      const downstreamCount = adoptersForCount
+        ? countUniqueDownstreamFromAdopters(d.id, adoptersForCount)
+        : undefined;
+      onSelect(d, downstreamCount);
     });
 }
 
@@ -146,7 +151,7 @@ type EasyLifeBranchTreeProps = {
   className?: string;
   actor?: string | null;
   onWelcomeBackBranch?: (account: string) => void;
-  onSelectNetworkNode?: (node: WelcomeNetworkNode) => void;
+  onSelectNetworkNode?: (node: WelcomeNetworkNode, downstreamCount?: number) => void;
 };
 
 export function EasyLifeBranchTree({
@@ -511,6 +516,7 @@ export function EasyLifeBranchTree({
     const layout = networkLayout;
     const levelByAccount = levelByAccountMap(networkGraph);
     const hierarchyRoot = buildSpanningHierarchy(adoptersFromGraph(networkGraph));
+    const adoptersForCount = adoptersFromGraph(networkGraph);
 
     if (layout === 'force' || layout === 'tangled') {
       const sim = runForceLayout(networkGraph, { width, height, tangled: layout === 'tangled' });
@@ -548,7 +554,7 @@ export function EasyLifeBranchTree({
         .attr('stroke-width', 1.4);
 
       appendNetworkNodeLabels(node);
-      if (onSelectNetworkNode) wireNetworkNodeClick(node, onSelectNetworkNode);
+      if (onSelectNetworkNode) wireNetworkNodeClick(node, onSelectNetworkNode, adoptersForCount);
 
       sim.on('tick', () => {
         link
@@ -618,12 +624,13 @@ export function EasyLifeBranchTree({
 
       node
         .append('circle')
-        .attr('r', (d) => nodeRadius(d))
+        .attr('r', (d) => nodeRadius(d) + (d.id === radialRoot.data.account ? 3 : 0))
         .attr('fill', (d) => welcomeLevelColor(d.level))
-        .attr('stroke', (d) => welcomeLevelColor(d.level));
+        .attr('stroke', (d) => welcomeLevelColor(d.level))
+        .attr('stroke-width', (d) => (d.id === radialRoot.data.account ? 2 : 1.2));
 
       appendNetworkNodeLabels(node);
-      if (onSelectNetworkNode) wireNetworkNodeClick(node, onSelectNetworkNode);
+      if (onSelectNetworkNode) wireNetworkNodeClick(node, onSelectNetworkNode, adoptersForCount);
     } else if (layout === 'horizontal') {
       const { root: hRoot, width: treeW, height: treeH } = layoutHierarchyHorizontal(hierarchyRoot);
       svg.setAttribute('viewBox', `0 0 ${treeW} ${treeH}`);
@@ -675,7 +682,7 @@ export function EasyLifeBranchTree({
         .attr('stroke', (d) => welcomeLevelColor(d.level));
 
       appendNetworkNodeLabels(node);
-      if (onSelectNetworkNode) wireNetworkNodeClick(node, onSelectNetworkNode);
+      if (onSelectNetworkNode) wireNetworkNodeClick(node, onSelectNetworkNode, adoptersForCount);
     } else if (layout === 'pack') {
       const size = Math.min(width, height) - 32;
       const root = layoutHierarchyPack(hierarchyRoot, size);
@@ -719,7 +726,7 @@ export function EasyLifeBranchTree({
       node
         .filter((d) => d.r > 14)
         .call((sel) => appendNetworkNodeLabels(sel as d3.Selection<SVGGElement, WelcomeNetworkNode, SVGGElement, unknown>));
-      if (onSelectNetworkNode) wireNetworkNodeClick(node, onSelectNetworkNode);
+      if (onSelectNetworkNode) wireNetworkNodeClick(node, onSelectNetworkNode, adoptersForCount);
     }
 
     const zoom = d3
