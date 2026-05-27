@@ -3,6 +3,45 @@ import { CHAIN_ENDPOINTS } from '@/services/walletConstants';
 export const EASY_INVITE_CONTRACT = 'invite.mon3y';
 export const EASY_INVITE_TOKEN_CONTRACT = 'mon3y';
 export const EASY_INVITE_MIN_AMOUNT = 200;
+export const EASY_REWELCOME_MEMO = 'Welcome Back 🍹';
+
+/** Same series as `easyinvite` contract `TETRAHEDRAL`. */
+export const TETRAHEDRAL_THRESHOLDS = [
+  1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 560, 680, 816, 969, 1140, 1330, 1540, 1771, 2024, 2300,
+  2600, 999999999,
+] as const;
+
+function parseUintField(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+  }
+  return 0;
+}
+
+/** Tetrahedral level index used for Welcome Back pricing (matches on-chain). */
+export function tetrahedralLevelFromScore(score: number): number {
+  const s = parseUintField(score);
+  for (let i = 0; i < TETRAHEDRAL_THRESHOLDS.length; i++) {
+    if (TETRAHEDRAL_THRESHOLDS[i] > s) {
+      const raw = i;
+      return raw === 0 ? 1 : raw;
+    }
+  }
+  return Math.max(1, TETRAHEDRAL_THRESHOLDS.length - 1);
+}
+
+export function welcomeBackMinimumEasy(score: number): number {
+  return tetrahedralLevelFromScore(score) * EASY_INVITE_MIN_AMOUNT;
+}
+
+export type InviteRequestMessage = {
+  account: string;
+  requester: string;
+  message: string;
+  createdAt: number;
+};
 
 export type EasyInviteAccountStatus = {
   account: string;
@@ -66,10 +105,28 @@ function parseAdopterRow(row: AdopterRow): EasyInviteAdopter | null {
   return {
     account,
     invitedby: row.invitedby?.trim() ?? '',
-    score: typeof row.score === 'number' ? row.score : 0,
+    score: parseUintField(row.score),
     banked: row.banked?.trim() ?? '0.000000 EASY',
-    lastupdated: typeof row.lastupdated === 'number' ? row.lastupdated : 0,
+    lastupdated: parseUintField(row.lastupdated),
   };
+}
+
+async function fetchAllAdoptersFromEndpoint(endpoint: string): Promise<EasyInviteAdopter[]> {
+  const allRows: EasyInviteAdopter[] = [];
+  let lowerBound: string | undefined;
+  for (;;) {
+    const page = await fetchAdoptersPage(endpoint, lowerBound);
+    allRows.push(...page.rows);
+    if (!page.more) break;
+    if (page.nextKey !== undefined) {
+      lowerBound = page.nextKey;
+      continue;
+    }
+    const last = page.rows[page.rows.length - 1];
+    if (!last) break;
+    lowerBound = last.account;
+  }
+  return allRows;
 }
 
 async function fetchAdoptersPage(
@@ -175,6 +232,19 @@ export async function fetchEasyInviteAdopter(account: string): Promise<EasyInvit
   throw lastError ?? new Error('Unable to load adopter row.');
 }
 
+/** Full `adopters` table from `invite.mon3y` (paginated). */
+export async function fetchAllEasyInviteAdopters(): Promise<EasyInviteAdopter[]> {
+  let lastError: Error | null = null;
+  for (const endpoint of CHAIN_ENDPOINTS) {
+    try {
+      return await fetchAllAdoptersFromEndpoint(endpoint);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+  throw lastError ?? new Error('Unable to load welcome network.');
+}
+
 export async function fetchEasyInviteProgramStatus(account: string): Promise<EasyInviteProgramStatus> {
   const normalized = account.trim().toLowerCase();
   if (!normalized) {
@@ -183,20 +253,7 @@ export async function fetchEasyInviteProgramStatus(account: string): Promise<Eas
   let lastError: Error | null = null;
   for (const endpoint of CHAIN_ENDPOINTS) {
     try {
-      let lowerBound: string | undefined;
-      const allRows: EasyInviteAdopter[] = [];
-      for (;;) {
-        const page = await fetchAdoptersPage(endpoint, lowerBound);
-        allRows.push(...page.rows);
-        if (!page.more) break;
-        if (page.nextKey !== undefined) {
-          lowerBound = page.nextKey;
-          continue;
-        }
-        const last = page.rows[page.rows.length - 1];
-        if (!last) break;
-        lowerBound = last.account;
-      }
+      const allRows = await fetchAllAdoptersFromEndpoint(endpoint);
 
       allRows.sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
@@ -276,7 +333,7 @@ function parseInviteRequestRow(row: InviteRequestRow): EasyInviteRequest | null 
   return {
     account,
     requester: row.requester?.trim() ?? '',
-    requestedAt: typeof row.requested_at === 'number' ? row.requested_at : 0,
+    requestedAt: parseUintField(row.requested_at),
   };
 }
 
@@ -340,3 +397,6 @@ export async function fetchEasyInviteRequests(): Promise<EasyInviteRequest[]> {
   }
   throw lastError ?? new Error('Unable to load invite requests.');
 }
+
+/** Latest message per queued account (Google Sheet when configured). */
+export { fetchInviteRequestMessagesFromSheet as fetchInviteRequestMessages } from '@/services/inviteMessageSheet';

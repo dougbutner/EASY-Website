@@ -4,6 +4,11 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EasyLifeBranchTree } from '@/components/EasyLifeBranchTree';
 import { EasyLifeShareBar } from '@/components/EasyLifeShareBar';
+import {
+  InviteQueueRequestDialog,
+  truncateInviteMessage,
+  type InviteQueueRequestDetail,
+} from '@/components/InviteQueueRequestDialog';
 import { Header } from '@/components/Header';
 import { JupiterEasyPlugin } from '@/components/JupiterEasyPlugin';
 import { Button } from '@/components/ui/button';
@@ -44,13 +49,19 @@ import {
   EASY_INVITE_CONTRACT,
   EASY_INVITE_MIN_AMOUNT,
   EASY_INVITE_TOKEN_CONTRACT,
+  TETRAHEDRAL_THRESHOLDS,
   fetchEasyInviteAccountStatus,
+  fetchEasyInviteAdopter,
+  EASY_REWELCOME_MEMO,
   fetchEasyInviteProgramStatus,
   fetchEasyInviteRequests,
+  fetchInviteRequestMessages,
+  welcomeBackMinimumEasy,
   type EasyInviteAccountStatus,
   type EasyInviteProgramStatus,
   type EasyInviteRequest,
 } from '@/services/easyInvite';
+import { postInviteRequestMessage } from '@/services/inviteMessageSheet';
 import { fetchBridgeEasySnapshot, type BridgeEasySnapshot } from '@/services/easyBalance';
 import { signUnbroadcastWebAuthTransaction, isStorexWebAuthSigner } from '@/services/walletSessions';
 import {
@@ -370,9 +381,6 @@ const BRIDGE_WITHDRAW_QUOTE_ID = 'FIXED';
 const BRIDGE_FEE_XPR_TO_SOLANA_EASY = 25;
 const EASY_INVITE_ACCOUNT_RE = /^[a-z1-5.]{1,12}$/;
 const EASY_INVITE_DEFAULT_MEMO = 'Welcome to the EASY Life 🍹';
-const EASY_REWELCOME_AMOUNT = EASY_INVITE_MIN_AMOUNT * 5;
-const EASY_REWELCOME_MEMO = 'Welcome Back 🍹';
-const TETRAHEDRAL_LEVELS = [1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364] as const;
 
 function tokenLogoUrl(token: TokenConfig, wonRandom: string): string {
   if (token.symbol === 'WON') return wonRandom;
@@ -536,8 +544,11 @@ const Index = () => {
   const [inviteProgramLoading, setInviteProgramLoading] = useState(false);
   const [askWelcomeInviter, setAskWelcomeInviter] = useState('');
   const [askWelcomeAccount, setAskWelcomeAccount] = useState('');
+  const [askWelcomeMessage, setAskWelcomeMessage] = useState('');
   const [inviteRequests, setInviteRequests] = useState<EasyInviteRequest[]>([]);
   const [inviteRequestsLoading, setInviteRequestsLoading] = useState(false);
+  const [inviteRequestMessages, setInviteRequestMessages] = useState<Record<string, string>>({});
+  const [expandedInviteRequest, setExpandedInviteRequest] = useState<InviteQueueRequestDetail | null>(null);
   const [reflectionPoolBySymbol, setReflectionPoolBySymbol] = useState<Record<string, string | null>>({});
   const [reflectionPoolLoading, setReflectionPoolLoading] = useState(false);
   const [chainReadEpoch, setChainReadEpoch] = useState(0);
@@ -745,6 +756,27 @@ const Index = () => {
       cancelled = true;
     };
   }, [actor, loading, inviteProgramStatus?.inProgram, chainReadEpoch]);
+
+  useEffect(() => {
+    if (!inviteRequests.length) {
+      setInviteRequestMessages({});
+      return;
+    }
+    let cancelled = false;
+    fetchInviteRequestMessages(inviteRequests.map((row) => row.account))
+      .then((map) => {
+        if (cancelled) return;
+        const messages: Record<string, string> = {};
+        for (const [account, row] of map) messages[account] = row.message;
+        setInviteRequestMessages(messages);
+      })
+      .catch(() => {
+        if (!cancelled) setInviteRequestMessages({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteRequests]);
 
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1041,38 +1073,152 @@ const Index = () => {
     ]);
   };
 
-  const sendWelcomeBackBranch = useCallback((account: string) => {
-    const target = account.trim().toLowerCase();
-    if (!isLoggedIn || !actor) {
-      toast.error('Connect a wallet first.');
-      return;
-    }
-    if (!EASY_INVITE_ACCOUNT_RE.test(target)) {
-      toast.error('That branch account is not a valid XPR account.');
-      return;
-    }
-    if (target === actor) {
-      toast.error('You cannot Welcome Back your own account.');
-      return;
-    }
+  const sendWelcomeFromQueue = useCallback(
+    ({ account, amount, memo }: { account: string; amount: number; memo: string }) => {
+      if (!isLoggedIn || !actor) {
+        toast.error('Connect a wallet first.');
+        return;
+      }
+      if (!EASY_INVITE_ACCOUNT_RE.test(account)) {
+        toast.error('Enter a valid XPR account name.');
+        return;
+      }
+      if (!Number.isFinite(amount) || amount < EASY_INVITE_MIN_AMOUNT) {
+        toast.error(`Welcome amount must be at least ${EASY_INVITE_MIN_AMOUNT} EASY.`);
+        return;
+      }
 
-    submitAction('Welcome Back', [
-      {
-        account: EASY_INVITE_TOKEN_CONTRACT,
-        name: 'transfer',
-        data: {
-          from: actor,
-          to: EASY_INVITE_CONTRACT,
-          quantity: `${EASY_REWELCOME_AMOUNT.toFixed(6)} EASY`,
-          memo: `${target}|${EASY_REWELCOME_MEMO}`,
+      void fetchEasyInviteAccountStatus(account)
+        .then((status) => {
+          if (!status.exists) {
+            toast.error(`${account} does not exist on XPR Network yet.`);
+            return;
+          }
+          if (status.registered) {
+            toast.error('That account has already been welcomed.');
+            return;
+          }
+          submitAction('Welcome program', [
+            {
+              account: EASY_INVITE_TOKEN_CONTRACT,
+              name: 'transfer',
+              data: {
+                from: actor,
+                to: EASY_INVITE_CONTRACT,
+                quantity: `${amount.toFixed(6)} EASY`,
+                memo: `${account}|${memo.trim() || EASY_INVITE_DEFAULT_MEMO}`,
+              },
+            },
+          ]);
+          setExpandedInviteRequest(null);
+        })
+        .catch((err) => {
+          toast.error(err instanceof Error ? err.message : 'Could not check that account.');
+        });
+    },
+    [actor, isLoggedIn, submitAction]
+  );
+
+  const sendWelcomeBackFromQueue = useCallback(
+    ({ account, amount, memo }: { account: string; amount: number; memo: string }) => {
+      if (!isLoggedIn || !actor) {
+        toast.error('Connect a wallet first.');
+        return;
+      }
+      const target = account.trim().toLowerCase();
+      if (!EASY_INVITE_ACCOUNT_RE.test(target)) {
+        toast.error('Enter a valid XPR account name.');
+        return;
+      }
+      if (target === actor) {
+        toast.error('You cannot Welcome Back your own account.');
+        return;
+      }
+
+      const detail = expandedInviteRequest;
+      const minEasy =
+        detail?.account === target && detail.score !== undefined
+          ? welcomeBackMinimumEasy(detail.score)
+          : EASY_INVITE_MIN_AMOUNT;
+
+      if (!Number.isFinite(amount) || amount < minEasy) {
+        toast.error(`Welcome Back requires at least ${minEasy} EASY for this account.`);
+        return;
+      }
+
+      submitAction('Welcome Back', [
+        {
+          account: EASY_INVITE_TOKEN_CONTRACT,
+          name: 'transfer',
+          data: {
+            from: actor,
+            to: EASY_INVITE_CONTRACT,
+            quantity: `${amount.toFixed(6)} EASY`,
+            memo: `${target}|${memo.trim() || EASY_REWELCOME_MEMO}`,
+          },
         },
-      },
-    ]);
-  }, [actor, isLoggedIn, submitAction]);
+      ]);
+      setExpandedInviteRequest(null);
+    },
+    [actor, expandedInviteRequest, isLoggedIn, submitAction]
+  );
+
+  const openNetworkNodeDialog = useCallback((node: { id: string; score: number; banked: string; invitedby: string }) => {
+    setExpandedInviteRequest({
+      account: node.id,
+      requester: node.invitedby,
+      message: '',
+      score: node.score,
+      banked: node.banked,
+    });
+  }, []);
+
+  const sendWelcomeBackBranch = useCallback(
+    async (account: string) => {
+      const target = account.trim().toLowerCase();
+      if (!isLoggedIn || !actor) {
+        toast.error('Connect a wallet first.');
+        return;
+      }
+      if (!EASY_INVITE_ACCOUNT_RE.test(target)) {
+        toast.error('That branch account is not a valid XPR account.');
+        return;
+      }
+      if (target === actor) {
+        toast.error('You cannot Welcome Back your own account.');
+        return;
+      }
+
+      let targetScore = 0;
+      try {
+        const targetAdopter = await fetchEasyInviteAdopter(target);
+        if (targetAdopter) targetScore = targetAdopter.score;
+      } catch {
+        toast.error('Could not load that account’s invite score for Welcome Back pricing.');
+        return;
+      }
+
+      const minEasy = welcomeBackMinimumEasy(targetScore);
+      submitAction('Welcome Back', [
+        {
+          account: EASY_INVITE_TOKEN_CONTRACT,
+          name: 'transfer',
+          data: {
+            from: actor,
+            to: EASY_INVITE_CONTRACT,
+            quantity: `${minEasy.toFixed(6)} EASY`,
+            memo: `${target}|${EASY_REWELCOME_MEMO}`,
+          },
+        },
+      ]);
+    },
+    [actor, isLoggedIn, submitAction]
+  );
 
   const requestWelcome = () => {
     const requester = askWelcomeInviter.trim().toLowerCase();
     const account = askWelcomeAccount.trim().toLowerCase();
+    const message = askWelcomeMessage.trim();
     if (!isLoggedIn || !actor) {
       toast.error('Connect a wallet first.');
       return;
@@ -1089,6 +1235,10 @@ const Index = () => {
       toast.error('Requester must match your connected wallet.');
       return;
     }
+    if (message.length > 500) {
+      toast.error('Message must be 500 characters or less.');
+      return;
+    }
 
     submitAction('Request a welcome', [
       {
@@ -1097,6 +1247,10 @@ const Index = () => {
         data: { account, requester },
       },
     ]);
+
+    if (message) {
+      void postInviteRequestMessage(account, requester, message).catch(() => {});
+    }
   };
 
   return (
@@ -1938,9 +2092,10 @@ const Index = () => {
                   <p className="mt-3 leading-7 text-yellow-100/65">
                     Can one earn faster? Have you thought of offering wallet onboarding as a service for XPR
                     greenhorns while growing your own invite score. Or you can Welcome Back any account (even{' '}
-                    <code className={codeInlineClass}>reflections</code>) for 1000 EASY, effectively paying a premium
-                    to be their upstream, earning each time they welcome until another Welcome Back occurs from the
-                    original inviter — stacking points from their networks, with 500 EASY to the networker and 500 to{' '}
+                    <code className={codeInlineClass}>reflections</code>) for 200 EASY per tetrahedral level, effectively
+                    paying a premium to be their upstream, earning each time they welcome until another Welcome Back
+                    occurs from the original inviter — stacking points from their networks, with half to the networker
+                    and half to{' '}
                     <code className={codeInlineClass}>inbank.mon3y</code>.
                   </p>
                   <p className="mt-3 text-sm leading-6 text-yellow-100/50">
@@ -2085,7 +2240,7 @@ const Index = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-yellow-300/10 text-yellow-100/70">
-                        {TETRAHEDRAL_LEVELS.map((score, index) => (
+                        {TETRAHEDRAL_THRESHOLDS.filter((t) => t < 999999999).map((score, index) => (
                           <tr key={score}>
                             <td className="px-4 py-3 font-mono text-yellow-100">{index + 1}x</td>
                             <td className="px-4 py-3">{score}</td>
@@ -2100,7 +2255,8 @@ const Index = () => {
                     pushes your invite score into higher multipliers.
                   </p>
                   <p className="text-xs text-yellow-100/45">
-                    Quick read: hitting {TETRAHEDRAL_LEVELS[0]}, {TETRAHEDRAL_LEVELS[1]}, {TETRAHEDRAL_LEVELS[2]} invites
+                    Quick read: hitting {TETRAHEDRAL_THRESHOLDS[0]}, {TETRAHEDRAL_THRESHOLDS[1]}, {TETRAHEDRAL_THRESHOLDS[2]}{' '}
+                    invites
                     moves you from 1x to 2x to 3x.
                   </p>
                 </div>
@@ -2184,6 +2340,13 @@ const Index = () => {
                     label="Banked EASY"
                   />
                 </div>
+                {inviteProgramStatus?.inProgram ? (
+                  <p className="mt-4 text-sm text-yellow-100/60">
+                    Welcome Back cost is <span className="font-semibold text-yellow-200">200 EASY</span> × the{' '}
+                    <span className="font-semibold text-yellow-200">purchased account’s</span> tetrahedral level (from
+                    their invite score), not yours.
+                  </p>
+                ) : null}
               </div>
 
               <div className="rounded-[1.5rem] border border-yellow-300/15 bg-black/55 p-5">
@@ -2209,6 +2372,7 @@ const Index = () => {
                             <tr>
                               <th className="px-3 py-2">Account</th>
                               <th className="px-3 py-2">Requester</th>
+                              <th className="px-3 py-2">Message</th>
                               <th className="px-3 py-2">Requested</th>
                             </tr>
                           </thead>
@@ -2217,6 +2381,22 @@ const Index = () => {
                               <tr key={row.account}>
                                 <td className="px-3 py-2 font-mono">{row.account}</td>
                                 <td className="px-3 py-2 font-mono">{row.requester}</td>
+                                <td className="max-w-[8rem] px-3 py-2 text-yellow-100/70">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedInviteRequest({
+                                        account: row.account,
+                                        requester: row.requester,
+                                        message: inviteRequestMessages[row.account] ?? '',
+                                      })
+                                    }
+                                    className="max-w-full truncate text-left font-mono text-xs text-yellow-200/90 underline decoration-yellow-300/30 underline-offset-2 hover:text-yellow-50"
+                                    title="Welcome this request"
+                                  >
+                                    {truncateInviteMessage(inviteRequestMessages[row.account] ?? '')}
+                                  </button>
+                                </td>
                                 <td className="px-3 py-2 text-yellow-100/55">
                                   {row.requestedAt
                                     ? new Date(row.requestedAt * 1000).toLocaleString()
@@ -2236,7 +2416,15 @@ const Index = () => {
                     <p className="mt-3 text-sm leading-7 text-yellow-100/65">
                       Submits <code className={codeInlineClass}>invite.mon3y::ask4invite</code> on-chain. Someone can
                       later welcome you with a paid transfer using memo prefix{' '}
-                      <code className={codeInlineClass}>*|</code>.
+                      <code className={codeInlineClass}>*|</code>.{' '}
+                      <a
+                        href="https://t.me/flextokens"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-yellow-200 underline decoration-yellow-300/35 underline-offset-2 hover:text-yellow-50"
+                      >
+                        Tell us why in Telegram
+                      </a>
                     </p>
                     <div className="mt-4 grid gap-3">
                       <div className="space-y-2">
@@ -2264,6 +2452,22 @@ const Index = () => {
                         />
                       </div>
                     </div>
+                    <div className="mt-3 space-y-2">
+                      <Label htmlFor="ask-welcome-message" className="text-yellow-100/80">
+                        Message (optional)
+                      </Label>
+                      <textarea
+                        id="ask-welcome-message"
+                        value={askWelcomeMessage}
+                        onChange={(event) => {
+                          const next = event.target.value;
+                          setAskWelcomeMessage(next.length > 500 ? next.slice(0, 500) : next);
+                        }}
+                        placeholder="Why do you want in? (max 500 characters)"
+                        className="min-h-[96px] w-full resize-y rounded-md border border-yellow-300/20 bg-black/70 px-3 py-2 text-sm text-yellow-50 placeholder:text-yellow-100/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/40"
+                      />
+                      <p className="text-xs text-yellow-100/45">{askWelcomeMessage.length}/500</p>
+                    </div>
                     <Button
                       type="button"
                       onClick={requestWelcome}
@@ -2282,6 +2486,14 @@ const Index = () => {
               </div>
             </div>
           </GlassCard>
+          <InviteQueueRequestDialog
+            detail={expandedInviteRequest}
+            onClose={() => setExpandedInviteRequest(null)}
+            isLoggedIn={isLoggedIn}
+            submitting={submitting}
+            onWelcome={sendWelcomeFromQueue}
+            onWelcomeBack={sendWelcomeBackFromQueue}
+          />
         </SnapSection>
 
         <SnapSection
@@ -2295,14 +2507,15 @@ const Index = () => {
             </p>
             <p className="mt-3 max-w-3xl text-base leading-7 text-yellow-100/65">
               View your network on <code className={codeInlineClass}>invite.mon3y</code> — who you welcomed and who
-              they welcomed downstream. Load edges, explore accounts, even buy someone&apos;s downstream for 1000 EASY
-              (they earn 500 + you get +500 banked) when you are ready; each click is one chain pass.
+              they welcomed downstream. Load edges, explore accounts, even buy someone&apos;s downstream via Welcome Back
+              (200 EASY per tetrahedral level; 50/50 split) when you are ready; each click is one chain pass.
             </p>
             <div className="mt-6">
               <EasyLifeBranchTree
                 rootAccount={actor}
                 actor={actor}
                 onWelcomeBackBranch={sendWelcomeBackBranch}
+                onSelectNetworkNode={openNetworkNodeDialog}
               />
             </div>
           </GlassCard>

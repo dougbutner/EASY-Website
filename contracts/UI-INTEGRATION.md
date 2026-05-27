@@ -27,7 +27,7 @@ flowchart LR
   invite -->|reward pool| claimreward
 ```
 
-1. **Paid invite** — User sends EASY to `invite.mon3y` via `mon3y::transfer` with a structured memo. On a **first welcome**, the contract registers the invited account, bumps invite scores up the upline, banks half of the payment to `inbank.mon3y`, and forwards the other half to the invited user (minimum `config.min_invite_amount`, default 200 EASY). On a **re-welcome** (invited account already in `adopters`), the same 50/50 token flow still runs, but only `invitedby` (and `lastupdated`) change — and the transfer must be at least **5×** `min_invite_amount` (default **1000 EASY**) to change who gets credit as inviter.
+1. **Paid invite** — User sends EASY to `invite.mon3y` via `mon3y::transfer` with a structured memo. On a **first welcome**, the contract registers the invited account, bumps invite scores up the upline, banks half of the payment to `inbank.mon3y`, and forwards the other half to the invited user (minimum `config.min_invite_amount`, default 200 EASY). On a **Welcome Back** (invited account already in `adopters`), the same 50/50 token flow still runs, but only `invitedby` (and `lastupdated`) change — and the transfer must be at least **200 EASY × the invited account's tetrahedral level** (level is computed from the **purchased** account's `score`, minimum level is 1).
 2. **Queue invite** — User calls `ask4invite` to join a FIFO queue. A later paid invite with memo prefix `*|` consumes the oldest queue entry. Queue rows for accounts already in `adopters` are skipped or removed automatically.
 3. **Claim rewards** — Anyone may call `claimreward` (no parameters, no special auth). Contract pays adopters from EASY held on `invite.mon3y`, weighted by their `banked` amount and tetrahedral level, using `inbank.mon3y` balance as the weighting denominator.
 
@@ -147,7 +147,7 @@ The invited account **may already be in `adopters`** (re-welcome / change invite
 | Welcome type | Minimum transfer |
 |--------------|------------------|
 | First welcome | `config.min_invite_amount` (default 200 EASY) |
-| Re-welcome (already in `adopters`) | **5 ×** `config.min_invite_amount` (default 1000 EASY) |
+| Welcome Back (already in `adopters`) | **200 EASY × invited account tetrahedral level** (min 200 EASY) |
 
 On re-welcome, tokens are still split and forwarded as usual, the payer’s `banked` increases, and the invited user’s `invitedby` is set to the paying inviter (see **Inviter resolution**). Upline `score` bumps and `stats.total_users` apply only on a **first** welcome.
 
@@ -177,9 +177,9 @@ The invited account receives **50%** of the transfer (rounded down on the banked
 
 Uses the oldest row in `invrequests` (by `bytime`), skipping any head whose `account` is already in `adopters`. The chosen row is removed when the transfer is processed; the queued `account` becomes the invited user.
 
-#### Re-welcome (change inviter)
+#### Welcome Back (change inviter)
 
-Send the same `mon3y::transfer` to `invite.mon3y` with memo `{already_registered_account}|{message}` and quantity **≥ 5 × `min_invite_amount`** (default **1000.000000 EASY** when min is 200). Use this when a registered user should credit a **new** direct inviter. The UI should show the 5× cost clearly so users do not attempt a 200 EASY transfer and fail.
+Send the same `mon3y::transfer` to `invite.mon3y` with memo `{already_registered_account}|{message}` and quantity **≥ 200 EASY × that account's tetrahedral level** (from their invite score; minimum 200 EASY). Use this when a registered user should credit a **new** direct inviter. The UI should show the per-target cost clearly so users don’t attempt a too-small transfer and fail.
 
 Errors the UI may surface:
 
@@ -187,7 +187,7 @@ Errors the UI may surface:
 |---------|--------|
 | `❇️ Sorry, registration is paused right now` | `config.enabled == false` |
 | `Invite transfer is below configured minimum` | First welcome below `min_invite_amount` |
-| `❇️ Re-welcome requires 5x the minimum invite amount` | Invited account already in `adopters` but amount &lt; 5 × `min_invite_amount` |
+| `❇️ Welcome Back (opening floodgate to ... ) requires ...` | Invited account already in `adopters` but amount is below `200 EASY × invited account tetrahedral level` |
 | `❇️ You can't invite yourself` | Invited account equals payer |
 | `No pending invite requests` | Queue memo but empty queue (after skipping already-welcomed heads) |
 | `Banked payer is not registered` | Payer could not be registered (should not occur after a valid transfer) |
@@ -354,9 +354,9 @@ cleos push action mon3y transfer \
   '["USER", "invite.mon3y", "200.000000 EASY", "*|Queue funded"]' \
   -p USER@active
 
-# Re-welcome: change bob's inviter to USER (bob already registered; 5x min = 1000 EASY)
+# Welcome Back: change bob's inviter to USER (bob already registered; min = 200 EASY × payer level)
 cleos push action mon3y transfer \
-  '["USER", "invite.mon3y", "1000.000000 EASY", "bob|Thanks again"]' \
+  '["USER", "invite.mon3y", "200.000000 EASY", "bob|Thanks again"]' \
   -p USER@active
 
 # Run one claim page (any signer)
@@ -370,7 +370,7 @@ cleos push action invite.mon3y claimreward '{}' -p USER@active
 - [ ] Load `config` + `stats` on app start
 - [ ] Gate invite UI on `config.enabled`
 - [ ] Format memos with `|`; validate invited account exists
-- [ ] Support re-welcome at **5×** `min_invite_amount` for accounts already in `adopters`
+- [ ] Support Welcome Back at **200 EASY × invited account tetrahedral level** for accounts already in `adopters`
 - [ ] Refresh or hide `invrequests` after a welcome (row removed on-chain for that `account`)
 - [ ] Use `getCurrencyBalance` for EASY on user, `invite.mon3y`, `inbank.mon3y`
 - [ ] Detect registration via `adopters` primary key lookup

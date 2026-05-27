@@ -56,9 +56,8 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
 
   if (adopters.find(invited_account.value) != adopters.end()) {
     const int64_t min_amount = cfg.min_invite_amount.amount;
-    auto payer_itr = adopters.find(from.value);
-    const uint32_t payer_score = payer_itr != adopters.end() ? payer_itr->score : 0;
-    const uint32_t level = calculate_tetrahedral_position(payer_score);
+    auto invited_itr = adopters.find(invited_account.value);
+    const uint32_t level = calculate_tetrahedral_position(invited_itr->score);
     const asset min_rewelcome_amount(min_amount * static_cast<int64_t>(level), invite_symbol);
     check(quantity >= min_rewelcome_amount,
       "❇️ Welcome Back (opening floodgate to " + invited_account.to_string() + "'s downstream) requires " +
