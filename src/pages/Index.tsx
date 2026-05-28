@@ -281,6 +281,7 @@ const firstFoldJumpLinks = [
   { id: 'flex-tools', emoji: '💸', label: 'Send it' },
   { id: 'bridge', emoji: '🌉', label: 'Solana XPR Bridge' },
   { id: 'easy-life', emoji: '🤝', label: 'Welcome Friend' },
+  { id: 'community-chat', emoji: '💬', label: 'Community Chat', href: 'https://t.me/flextokens' },
 ] as const;
 
 /** Alcor XPR web UI: `https://alcor.exchange/v/xpr/...` (swap, swap-widget, terminal, farm). */
@@ -1287,17 +1288,32 @@ const Index = () => {
             <FlexTownStoryRotator />
             <div className="flex flex-wrap justify-center gap-3">
               {firstFoldJumpLinks.map((link) => (
-                <button
-                  key={link.id}
-                  type="button"
-                  onClick={() => scrollToSection(link.id)}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-yellow-300/25 bg-yellow-300/[0.08] px-5 py-3 text-sm font-bold text-yellow-100 transition hover:border-yellow-300/40 hover:bg-yellow-300/15 hover:text-yellow-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-300"
-                >
-                  <span className="text-xl leading-none" aria-hidden>
-                    {link.emoji}
-                  </span>
-                  {link.label}
-                </button>
+                link.href ? (
+                  <a
+                    key={link.id}
+                    href={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-2xl border border-yellow-300/25 bg-yellow-300/[0.08] px-5 py-3 text-sm font-bold text-yellow-100 transition hover:border-yellow-300/40 hover:bg-yellow-300/15 hover:text-yellow-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-300"
+                  >
+                    <span className="text-xl leading-none" aria-hidden>
+                      {link.emoji}
+                    </span>
+                    {link.label}
+                  </a>
+                ) : (
+                  <button
+                    key={link.id}
+                    type="button"
+                    onClick={() => scrollToSection(link.id)}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-yellow-300/25 bg-yellow-300/[0.08] px-5 py-3 text-sm font-bold text-yellow-100 transition hover:border-yellow-300/40 hover:bg-yellow-300/15 hover:text-yellow-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-300"
+                  >
+                    <span className="text-xl leading-none" aria-hidden>
+                      {link.emoji}
+                    </span>
+                    {link.label}
+                  </button>
+                )
               ))}
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
