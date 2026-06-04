@@ -4,6 +4,11 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EasyLifeBranchTree } from '@/components/EasyLifeBranchTree';
 import { EasyLifeShareBar } from '@/components/EasyLifeShareBar';
+import { InviteNationSelect } from '@/components/InviteNationSelect';
+import {
+  Ask4InviteDialog,
+  type Ask4InviteSubmitPayload,
+} from '@/components/Ask4InviteDialog';
 import {
   InviteQueueRequestDialog,
   truncateInviteMessage,
@@ -22,6 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { ASK4INVITE_MESSAGE_MAX, formatAsk4InviteCharCount } from '@/constants/ask4inviteUi';
 import { pickRandomWonVariant, TOKEN_LOGO } from '@/constants/tokenAssets';
 import { useProton } from '@/hooks/useProton';
 import { cn } from '@/lib/utils';
@@ -49,6 +55,9 @@ import {
   EASY_INVITE_CONTRACT,
   EASY_INVITE_MIN_AMOUNT,
   EASY_INVITE_TOKEN_CONTRACT,
+  TETRAHEDRAL_LISTED_TIER_COUNT,
+  TETRAHEDRAL_MAX_LEVEL,
+  TETRAHEDRAL_TABLE_ROW_COUNT,
   TETRAHEDRAL_THRESHOLDS,
   fetchEasyInviteAccountStatus,
   fetchEasyInviteAdopter,
@@ -198,9 +207,9 @@ const tokens: TokenConfig[] = [
     symbol: 'GRAMS',
     contract: 'gold.mon3y',
     title: 'Golden GRAMS',
-    tagline: 'Generational gold—inheritance to any account, reflects XPAXG.',
+    tagline: 'Generational gold—inheritance to any account, reflects grams.',
     summary:
-      'Generational wealth stored in gold. Grandchildren-approved, with inheritance functionality for any account. Pure liquid for Paxos Gold, GRAMS reflects XPAXG by default.',
+      'Generational wealth stored in gold. Grandchildren-approved, with inheritance functionality for any account. Pure liquid for Paxos Gold, GRAMS reflects grams by default.',
     tax: '1.1% reflection + 0.11% team',
     minHold: '0.1 GRAMS',
     dexToken: 'GRAMS-gold.mon3y',
@@ -281,6 +290,7 @@ const firstFoldJumpLinks = [
   { id: 'flex-tools', emoji: '💸', label: 'Send it' },
   { id: 'bridge', emoji: '🌉', label: 'Solana XPR Bridge' },
   { id: 'easy-life', emoji: '🤝', label: 'Welcome Friend' },
+  { id: 'ask4invite', emoji: '🙌', label: 'ask4invite', opensAsk4Invite: true as const },
   { id: 'community-chat', emoji: '💬', label: 'Community Chat', href: 'https://t.me/flextokens' },
 ] as const;
 
@@ -308,7 +318,7 @@ const howItWorksSteps: { step: string; title: string; body: ReactNode }[] = [
         valued multiples higher than when it was added to the pool. We ranged EASY starting at a 210K market cap, one shiny penny,
         maxing out at a 2.1T market cap, 100K. This magic range allows initial buys to be a gift but not a steal,
         keeping enough allocated EASY for a reliable mon3y supply to BTC-level prices. Pure liquid tokens: EASY (for
-        USDish) WON (for EASY), and GRAMS (for XPAXG)
+        USDish) WON (for EASY), and GRAMS (for gold)
       </>
     ),
   },
@@ -543,9 +553,10 @@ const Index = () => {
   const [inviteAccountChecking, setInviteAccountChecking] = useState(false);
   const [inviteProgramStatus, setInviteProgramStatus] = useState<EasyInviteProgramStatus | null>(null);
   const [inviteProgramLoading, setInviteProgramLoading] = useState(false);
-  const [askWelcomeInviter, setAskWelcomeInviter] = useState('');
   const [askWelcomeAccount, setAskWelcomeAccount] = useState('');
   const [askWelcomeMessage, setAskWelcomeMessage] = useState('');
+  const [askWelcomeNation, setAskWelcomeNation] = useState('');
+  const [ask4InviteOpen, setAsk4InviteOpen] = useState(false);
   const [inviteRequests, setInviteRequests] = useState<EasyInviteRequest[]>([]);
   const [inviteRequestsLoading, setInviteRequestsLoading] = useState(false);
   const [inviteRequestMessages, setInviteRequestMessages] = useState<Record<string, string>>({});
@@ -727,11 +738,9 @@ const Index = () => {
 
   useEffect(() => {
     if (!actor || loading) {
-      setAskWelcomeInviter('');
       setAskWelcomeAccount('');
       return;
     }
-    setAskWelcomeInviter(actor);
     setAskWelcomeAccount(actor);
   }, [actor, loading]);
 
@@ -1220,42 +1229,69 @@ const Index = () => {
     [actor, isLoggedIn, submitAction]
   );
 
+  const submitAsk4Invite = useCallback(
+    ({ account, requester, request, nationIso3 }: Ask4InviteSubmitPayload) => {
+      if (!isLoggedIn || !actor) {
+        toast.error('Connect a wallet first.');
+        return;
+      }
+      if (inviteProgramStatus?.inProgram) {
+        toast.error('You are already in the Welcome Program.');
+        return;
+      }
+      if (!EASY_INVITE_ACCOUNT_RE.test(requester) || !EASY_INVITE_ACCOUNT_RE.test(account)) {
+        toast.error('Enter valid XPR account names.');
+        return;
+      }
+      if (requester !== actor) {
+        toast.error('Requester must match your connected wallet.');
+        return;
+      }
+      if (!nationIso3) {
+        toast.error('Choose your nation before submitting.');
+        return;
+      }
+      if (!request.trim()) {
+        toast.error('Invite request message is required.');
+        return;
+      }
+      if (request.length > ASK4INVITE_MESSAGE_MAX) {
+        toast.error(`Message must be ${ASK4INVITE_MESSAGE_MAX} characters or less.`);
+        return;
+      }
+
+      submitAction('Request a welcome', [
+        {
+          account: EASY_INVITE_CONTRACT,
+          name: 'ask4invite',
+          data: { account, requester, request, nation_iso3: nationIso3 },
+        },
+      ]);
+
+      void postInviteRequestMessage(account, requester, request).catch(() => {});
+      setAsk4InviteOpen(false);
+    },
+    [actor, inviteProgramStatus?.inProgram, isLoggedIn, submitAction]
+  );
+
   const requestWelcome = () => {
-    const requester = askWelcomeInviter.trim().toLowerCase();
-    const account = askWelcomeAccount.trim().toLowerCase();
-    const message = askWelcomeMessage.trim();
-    if (!isLoggedIn || !actor) {
+    if (!actor) {
       toast.error('Connect a wallet first.');
       return;
     }
-    if (inviteProgramStatus?.inProgram) {
-      toast.error('You are already in the Welcome Program.');
-      return;
-    }
-    if (!EASY_INVITE_ACCOUNT_RE.test(requester) || !EASY_INVITE_ACCOUNT_RE.test(account)) {
-      toast.error('Enter valid XPR account names.');
-      return;
-    }
-    if (requester !== actor) {
-      toast.error('Requester must match your connected wallet.');
-      return;
-    }
-    if (message.length > 500) {
-      toast.error('Message must be 500 characters or less.');
-      return;
-    }
+    const request =
+      askWelcomeMessage.trim() || 'Requesting welcome via flex.town';
+    submitAsk4Invite({
+      account: askWelcomeAccount.trim().toLowerCase(),
+      requester: actor,
+      request,
+      nationIso3: askWelcomeNation,
+    });
+  };
 
-    submitAction('Request a welcome', [
-      {
-        account: EASY_INVITE_CONTRACT,
-        name: 'ask4invite',
-        data: { account, requester },
-      },
-    ]);
-
-    if (message) {
-      void postInviteRequestMessage(account, requester, message).catch(() => {});
-    }
+  const openAsk4InviteDialog = () => {
+    scrollToSection('easy-life-status');
+    setAsk4InviteOpen(true);
   };
 
   return (
@@ -1287,8 +1323,8 @@ const Index = () => {
           <div className="w-full max-w-7xl space-y-5">
             <FlexTownStoryRotator />
             <div className="flex flex-wrap justify-center gap-3">
-              {firstFoldJumpLinks.map((link) => (
-                link.href ? (
+              {firstFoldJumpLinks.map((link) =>
+                'href' in link && link.href ? (
                   <a
                     key={link.id}
                     href={link.href}
@@ -1305,7 +1341,11 @@ const Index = () => {
                   <button
                     key={link.id}
                     type="button"
-                    onClick={() => scrollToSection(link.id)}
+                    onClick={() =>
+                      'opensAsk4Invite' in link && link.opensAsk4Invite
+                        ? openAsk4InviteDialog()
+                        : scrollToSection(link.id)
+                    }
                     className="inline-flex items-center gap-2 rounded-2xl border border-yellow-300/25 bg-yellow-300/[0.08] px-5 py-3 text-sm font-bold text-yellow-100 transition hover:border-yellow-300/40 hover:bg-yellow-300/15 hover:text-yellow-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-300"
                   >
                     <span className="text-xl leading-none" aria-hidden>
@@ -1314,7 +1354,7 @@ const Index = () => {
                     {link.label}
                   </button>
                 )
-              ))}
+              )}
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               {featureCards.map((feature) => (
@@ -2246,6 +2286,15 @@ const Index = () => {
 
               {easyLifeExpanded && (
                 <div className="mt-5 space-y-5">
+                  <p className="text-xs text-yellow-100/45">
+                    Quick read: hitting {TETRAHEDRAL_THRESHOLDS[0]}, {TETRAHEDRAL_THRESHOLDS[1]},{' '}
+                    {TETRAHEDRAL_THRESHOLDS[2]} invites moves you from 1x to 2x to 3x.
+                  </p>
+                  <p className="text-sm leading-7 text-yellow-100/55">
+                    Multiplier levels run up to <span className="font-semibold text-yellow-200">{TETRAHEDRAL_MAX_LEVEL}</span>{' '}
+                    as your invite score grows. The table shows the first {TETRAHEDRAL_TABLE_ROW_COUNT} of{' '}
+                    {TETRAHEDRAL_LISTED_TIER_COUNT} listed score tiers.
+                  </p>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <Metric value="200" label="Minimum welcome" />
                     <Metric value="100" label="EASY to new wallet" />
@@ -2260,12 +2309,14 @@ const Index = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-yellow-300/10 text-yellow-100/70">
-                        {TETRAHEDRAL_THRESHOLDS.filter((t) => t < 999999999).map((score, index) => (
-                          <tr key={score}>
-                            <td className="px-4 py-3 font-mono text-yellow-100">{index + 1}x</td>
-                            <td className="px-4 py-3">{score}</td>
-                          </tr>
-                        ))}
+                        {TETRAHEDRAL_THRESHOLDS.filter((t) => t < 999999999)
+                          .slice(0, TETRAHEDRAL_TABLE_ROW_COUNT)
+                          .map((score, index) => (
+                            <tr key={score}>
+                              <td className="px-4 py-3 font-mono text-yellow-100">{index + 1}x</td>
+                              <td className="px-4 py-3">{score}</td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
                   </div>
@@ -2273,11 +2324,6 @@ const Index = () => {
                     Your share of vault yield scales with banked EASY × tetrahedral level, paid from the program pool
                     against total banked in <code className={codeInlineClass}>inbank.mon3y</code>. A busier downstream
                     pushes your invite score into higher multipliers.
-                  </p>
-                  <p className="text-xs text-yellow-100/45">
-                    Quick read: hitting {TETRAHEDRAL_THRESHOLDS[0]}, {TETRAHEDRAL_THRESHOLDS[1]}, {TETRAHEDRAL_THRESHOLDS[2]}{' '}
-                    invites
-                    moves you from 1x to 2x to 3x.
                   </p>
                 </div>
               )}
@@ -2287,8 +2333,8 @@ const Index = () => {
                   Welcome loved ones to XPR Network
                 </p>
                 <p className="mt-2 text-sm leading-6 text-yellow-100/60">
-                  Share a short invite: why EASY might fit them, links to WebAuth and flex.town, and ask for their
-                  username when they&apos;re ready to receive EASY.
+                  Preloaded invite copy below — edit it and the share buttons update live. Ask for their username when
+                  they&apos;re ready for EASY on WebAuth.
                 </p>
                 <EasyLifeShareBar className="mt-4" />
               </div>
@@ -2435,9 +2481,12 @@ const Index = () => {
                     <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300">Request a welcome</p>
                     <h3 className="mt-3 text-2xl font-black text-yellow-50">Join the invite queue</h3>
                     <p className="mt-3 text-sm leading-7 text-yellow-100/65">
-                      Submits <code className={codeInlineClass}>invite.mon3y::ask4invite</code> on-chain. Someone can
-                      later welcome you with a paid transfer using memo prefix{' '}
-                      <code className={codeInlineClass}>*|</code>.{' '}
+                      Submits <code className={codeInlineClass}>invite.mon3y::ask4invite</code> on-chain. A generous soul
+                      can later welcome you with a 200 EASY transfer to{' '}
+                      <code className={codeInlineClass}>invite.mon3y</code>, memo prefix{' '}
+                      <code className={codeInlineClass}>*|</code>
+                      Welcome or <code className={codeInlineClass}>MEX|Bienvenidos</code> or{' '}
+                      <code className={codeInlineClass}>urname|Welcome</code>.{' '}
                       <a
                         href="https://t.me/flextokens"
                         target="_blank"
@@ -2447,61 +2496,60 @@ const Index = () => {
                         Tell us why in Telegram
                       </a>
                     </p>
-                    <div className="mt-4 grid gap-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="ask-welcome-inviter" className="text-yellow-100/80">
-                          Inviter (requester)
-                        </Label>
-                        <Input
-                          id="ask-welcome-inviter"
-                          value={askWelcomeInviter}
-                          onChange={(event) => setAskWelcomeInviter(event.target.value.toLowerCase())}
-                          placeholder="accountname"
-                          className="border-yellow-300/20 bg-black/70 font-mono text-yellow-50"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="ask-welcome-account" className="text-yellow-100/80">
-                          Account to welcome
-                        </Label>
-                        <Input
-                          id="ask-welcome-account"
-                          value={askWelcomeAccount}
-                          onChange={(event) => setAskWelcomeAccount(event.target.value.toLowerCase())}
-                          placeholder="accountname"
-                          className="border-yellow-300/20 bg-black/70 font-mono text-yellow-50"
-                        />
-                      </div>
+                    <div className="mt-4 space-y-2">
+                      <Label htmlFor="ask-welcome-account" className="text-yellow-100/80">
+                        My account
+                      </Label>
+                      <Input
+                        id="ask-welcome-account"
+                        value={askWelcomeAccount}
+                        onChange={(event) => setAskWelcomeAccount(event.target.value.toLowerCase())}
+                        placeholder="accountname"
+                        className="border-yellow-300/20 bg-black/70 font-mono text-yellow-50"
+                      />
                     </div>
                     <div className="mt-3 space-y-2">
                       <Label htmlFor="ask-welcome-message" className="text-yellow-100/80">
-                        Message (optional)
+                        I want to join the EASY Life because
                       </Label>
                       <textarea
                         id="ask-welcome-message"
                         value={askWelcomeMessage}
                         onChange={(event) => {
                           const next = event.target.value;
-                          setAskWelcomeMessage(next.length > 500 ? next.slice(0, 500) : next);
+                          setAskWelcomeMessage(
+                            next.length > ASK4INVITE_MESSAGE_MAX ? next.slice(0, ASK4INVITE_MESSAGE_MAX) : next
+                          );
                         }}
-                        placeholder="Why do you want in? (max 500 characters)"
                         className="min-h-[96px] w-full resize-y rounded-md border border-yellow-300/20 bg-black/70 px-3 py-2 text-sm text-yellow-50 placeholder:text-yellow-100/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/40"
                       />
-                      <p className="text-xs text-yellow-100/45">{askWelcomeMessage.length}/500</p>
+                      <p className="text-xs text-yellow-100/45">
+                        {formatAsk4InviteCharCount(askWelcomeMessage.length)}
+                      </p>
                     </div>
-                    <Button
-                      type="button"
-                      onClick={requestWelcome}
-                      disabled={
-                        !isLoggedIn ||
-                        submitting !== null ||
-                        inviteProgramLoading ||
-                        inviteProgramStatus?.inProgram === true
-                      }
-                      className="mt-4 w-full bg-yellow-300 text-black hover:bg-yellow-200 disabled:opacity-40"
-                    >
-                      {submitting === 'Request a welcome' ? 'Submitting…' : 'Request a welcome'}
-                    </Button>
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                      <div className="min-w-0 flex-1">
+                        <InviteNationSelect
+                          id="ask-welcome-nation"
+                          value={askWelcomeNation}
+                          onValueChange={setAskWelcomeNation}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={requestWelcome}
+                        disabled={
+                          !isLoggedIn ||
+                          submitting !== null ||
+                          inviteProgramLoading ||
+                          inviteProgramStatus?.inProgram === true ||
+                          !askWelcomeNation
+                        }
+                        className="w-full shrink-0 bg-yellow-300 text-black hover:bg-yellow-200 disabled:opacity-40 sm:w-auto sm:min-w-[11rem]"
+                      >
+                        {submitting === 'Request a welcome' ? 'Submitting…' : 'Request a welcome'}
+                      </Button>
+                    </div>
                   </>
                 )}
               </div>
@@ -2514,6 +2562,16 @@ const Index = () => {
             submitting={submitting}
             onWelcome={sendWelcomeFromQueue}
             onWelcomeBack={sendWelcomeBackFromQueue}
+          />
+          <Ask4InviteDialog
+            open={ask4InviteOpen}
+            onOpenChange={setAsk4InviteOpen}
+            actor={actor}
+            isLoggedIn={isLoggedIn}
+            inProgram={inviteProgramStatus?.inProgram === true}
+            programLoading={inviteProgramLoading}
+            submitting={submitting}
+            onSubmit={submitAsk4Invite}
           />
         </SnapSection>
 

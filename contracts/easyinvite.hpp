@@ -1,7 +1,6 @@
 #pragma once
 #include <eosio/eosio.hpp>
 #include <eosio/asset.hpp>
-#include <eosio/time.hpp>
 #include <eosio/singleton.hpp>
 #include <string>
 #include <climits>
@@ -23,11 +22,20 @@ public:
   // - Claim rewards for the next configured page of adopters
   ACTION claimreward();
 
-  // - Join the queue for a paid invite
-  ACTION ask4invite(name account, name requester);
+  // - Join the queue for a paid invite with personal message and optional nation
+  ACTION ask4invite(name account, name requester, string request, string nation_iso3);
 
   // - Remove stale queue rows for accounts already in adopters (oldest 12 checked)
   ACTION cleanasks();
+
+  // - Remove legacy queue rows with no invite memo (oldest 12 checked)
+  ACTION cleannomemo();
+
+  // - Contract-only removal from invite queue and memo tables
+  ACTION delinvreq(name account);
+
+  // - Member updates profile info, nation, and link
+  ACTION updateinfo(name account, string info, string nation_iso3, string link);
 
   // - Admin configuration management
   ACTION setconfig(
@@ -85,6 +93,33 @@ public:
     indexed_by<"bytime"_n, const_mem_fun<invite_request, uint64_t, &invite_request::by_time>>
   >;
 
+  // === Invite Memo Table === //
+  // --- Personal invite request message and nation --- //
+
+  TABLE invite_memo {
+    name     account;
+    string   request;
+    uint32_t nation;
+
+    uint64_t primary_key() const { return account.value; }
+  };
+
+  using invite_memos_table = multi_index<"invreqmemo"_n, invite_memo>;
+
+  // === Member Info Table === //
+  // --- Persisted profile after welcome --- //
+
+  TABLE member_info {
+    name     account;
+    string   info;
+    uint32_t nation;
+    string   link;
+
+    uint64_t primary_key() const { return account.value; }
+  };
+
+  using member_info_table = multi_index<"memberinfo"_n, member_info>;
+
   // === Config Singleton === //
   // --- Contract configuration values --- //
 
@@ -141,7 +176,21 @@ private:
   // --- Tetrahedral series values --- //
 
   // - Pre-calculated tetrahedral series values
-  const std::vector<uint32_t> TETRAHEDRAL = {1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 560, 680, 816, 969, 1140, 1330, 1540, 1771, 2024, 2300, 2600, 999999999};
+  const std::vector<uint32_t> TETRAHEDRAL = {
+    1, 4, 10, 20, 35, 56, 84, 120, 165, 220,          // 1-10
+    286, 364, 455, 560, 680, 816, 969, 1140, 1330, 1540,   // 11-20
+    1771, 2024, 2300, 2600, 2925, 3276, 3654, 4060, 4495, 4960, // 21-30
+    5456, 5984, 6545, 7140, 7770, 8436, 9139, 9880, 10660, 11480, // 31-40
+    12341, 13244, 14190, 15180, 16215, 17296, 18424, 19600, 20825, 22100, // 41-50
+    23426, 24804, 26235, 27720, 29260, 30856, 32509, 34220, 35990, 37820, // 51-60
+    39711, 41664, 43680, 45760, 47905, 50116, 52394, 54740, 57155, 59640, // 61-70
+    62196, 64824, 67525, 70300, 73150, 76076, 79079, 82160, 85320, 88560, // 71-80
+    91881, 95284, 98770, 102340, 105995, 109736, 113564, 117480, 121485, 125580, // 81-90
+    129766, 134044, 138415, 142880, 147440, 152096, 156849, 161700, 166650, 999999999
+};
+  string normalize_enum_name(const string& input);
+  uint32_t is_valid_country(uint32_t code, const string country_iso3);
+  void port_memo_to_member(name account, const string& info, uint32_t nation, name payer);
 
   // - Calculates position in tetrahedral series
   uint32_t calculate_tetrahedral_position(uint32_t score) {

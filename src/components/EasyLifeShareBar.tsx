@@ -7,7 +7,7 @@ import { Share2 } from 'lucide-react';
 import {
   EASY_LIFE_SHARE_TITLE,
   EASY_LIFE_TOOLS_URL,
-  pickRandomEasyLifeShareText,
+  defaultEasyLifeShareText,
 } from '@/constants/easyLifeShareMessages';
 import { cn } from '@/lib/utils';
 
@@ -110,7 +110,7 @@ const iconButtonClass =
   'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-yellow-300/20 bg-black/60 text-yellow-100/90 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/50';
 
 export function EasyLifeShareBar({ className }: { className?: string }) {
-  const [shareText] = useState(pickRandomEasyLifeShareText);
+  const [shareText, setShareText] = useState(defaultEasyLifeShareText);
   const [nativeShareReady] = useState(
     () => typeof navigator !== 'undefined' && typeof navigator.share === 'function'
   );
@@ -130,7 +130,17 @@ export function EasyLifeShareBar({ className }: { className?: string }) {
   };
 
   return (
-    <div className={cn(className)}>
+    <div className={cn('space-y-4', className)}>
+      <p className="text-xs leading-relaxed text-yellow-100/50">
+        Preloaded invite message — edit below; every share button uses your text as you type.
+      </p>
+      <textarea
+        value={shareText}
+        onChange={(event) => setShareText(event.target.value)}
+        rows={5}
+        className="w-full resize-y rounded-md border border-yellow-300/20 bg-black/70 px-3 py-2 text-sm leading-relaxed text-yellow-50 placeholder:text-yellow-100/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/40"
+        aria-label="Preloaded invite message for share links"
+      />
       <div className="flex flex-wrap items-center gap-2.5" role="group" aria-label="Share welcome message">
         {channels.map((channel) => (
           <a

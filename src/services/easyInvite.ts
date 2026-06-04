@@ -13,6 +13,13 @@ export const TETRAHEDRAL_THRESHOLDS = [
   2600, 999999999,
 ] as const;
 
+/** Listed invite-score tiers shown in the Welcome economics table (excludes sentinel). */
+export const TETRAHEDRAL_LISTED_TIER_COUNT = 24;
+/** Rows rendered in the economics table before noting remaining tiers. */
+export const TETRAHEDRAL_TABLE_ROW_COUNT = 22;
+/** Maximum tetrahedral multiplier level on-chain. */
+export const TETRAHEDRAL_MAX_LEVEL = 100;
+
 function parseUintField(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
   if (typeof value === 'string' && value.trim() !== '') {
