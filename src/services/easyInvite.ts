@@ -81,11 +81,16 @@ export function countUniqueDownstreamFromAdopters(
   return seen.size;
 }
 
-export type InviteRequestMessage = {
+export type EasyInviteRequestMemo = {
   account: string;
-  requester: string;
+  request: string;
+  nation: number;
+};
+
+/** Queue row with on-chain memo from `invreqmemo` (message + nation required). */
+export type EasyInvitePendingInvite = EasyInviteRequest & {
   message: string;
-  createdAt: number;
+  nation: number;
 };
 
 export type EasyInviteAccountStatus = {
@@ -122,6 +127,12 @@ type InviteRequestRow = {
   account?: string;
   requester?: string;
   requested_at?: number;
+};
+
+type InviteMemoRow = {
+  account?: string;
+  request?: string;
+  nation?: number;
 };
 
 type GetAccountResponse = {
@@ -443,5 +454,103 @@ export async function fetchEasyInviteRequests(): Promise<EasyInviteRequest[]> {
   throw lastError ?? new Error('Unable to load invite requests.');
 }
 
-/** Latest message per queued account (Google Sheet when configured). */
-export { fetchInviteRequestMessagesFromSheet as fetchInviteRequestMessages } from '@/services/inviteMessageSheet';
+function parseInviteMemoRow(row: InviteMemoRow): EasyInviteRequestMemo | null {
+  const account = row.account?.trim();
+  if (!account) return null;
+  const request = row.request?.trim() ?? '';
+  const nation = parseUintField(row.nation);
+  return { account, request, nation };
+}
+
+async function fetchInviteMemosPage(
+  endpoint: string,
+  lowerBound?: string
+): Promise<{ rows: EasyInviteRequestMemo[]; more: boolean; nextKey?: string }> {
+  const body: Record<string, unknown> = {
+    json: true,
+    code: EASY_INVITE_CONTRACT,
+    scope: EASY_INVITE_CONTRACT,
+    table: 'invreqmemo',
+    limit: 500,
+  };
+  if (lowerBound !== undefined) body.lower_bound = lowerBound;
+
+  const res = await fetch(`${endpoint}/v1/chain/get_table_rows`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => ({}))) as GetTableRowsResponse & {
+    rows?: InviteMemoRow[];
+  };
+  if (!res.ok) throw new Error(data.message || `Invite memos read failed (${res.status})`);
+
+  const rows = (data.rows ?? [])
+    .map(parseInviteMemoRow)
+    .filter((row): row is EasyInviteRequestMemo => row !== null);
+
+  return {
+    rows,
+    more: Boolean(data.more),
+    nextKey: data.next_key !== undefined && data.next_key !== null ? String(data.next_key) : undefined,
+  };
+}
+
+/** All rows in `invreqmemo` (personal message + nation code per queued account). */
+export async function fetchEasyInviteRequestMemos(): Promise<Map<string, EasyInviteRequestMemo>> {
+  let lastError: Error | null = null;
+  for (const endpoint of CHAIN_ENDPOINTS) {
+    try {
+      const map = new Map<string, EasyInviteRequestMemo>();
+      let lowerBound: string | undefined;
+      for (;;) {
+        const page = await fetchInviteMemosPage(endpoint, lowerBound);
+        for (const row of page.rows) map.set(row.account, row);
+        if (!page.more) break;
+        if (page.nextKey !== undefined) {
+          lowerBound = page.nextKey;
+          continue;
+        }
+        const last = page.rows[page.rows.length - 1];
+        if (!last) break;
+        lowerBound = last.account;
+      }
+      return map;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+  throw lastError ?? new Error('Unable to load invite memos.');
+}
+
+/** True when memo has non-empty on-chain message and nation (matches `cleannomemo`). */
+export function isCompleteInviteRequestMemo(memo: EasyInviteRequestMemo | undefined): boolean {
+  return Boolean(memo?.request.trim() && memo.nation);
+}
+
+/** Join `invrequests` with `invreqmemo`; drops rows missing message or nation. */
+export function mergeCompletePendingInvites(
+  requests: EasyInviteRequest[],
+  memos: Map<string, EasyInviteRequestMemo>
+): EasyInvitePendingInvite[] {
+  const pending: EasyInvitePendingInvite[] = [];
+  for (const req of requests) {
+    const memo = memos.get(req.account);
+    if (!isCompleteInviteRequestMemo(memo)) continue;
+    pending.push({
+      ...req,
+      message: memo!.request.trim(),
+      nation: memo!.nation,
+    });
+  }
+  return pending;
+}
+
+/** Queue rows with on-chain message and nation from `invreqmemo`. */
+export async function fetchEasyInvitePendingInvites(): Promise<EasyInvitePendingInvite[]> {
+  const [requests, memos] = await Promise.all([
+    fetchEasyInviteRequests(),
+    fetchEasyInviteRequestMemos(),
+  ]);
+  return mergeCompletePendingInvites(requests, memos);
+}

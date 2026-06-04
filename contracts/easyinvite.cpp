@@ -59,7 +59,7 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
     --pick;
     while (adopters.find(pick->account.value) != adopters.end()) {
       if (auto memo_itr = memos.find(pick->account.value); memo_itr != memos.end()) {
-        port_memo_to_member(memo_itr->account, memo_itr->request, memo_itr->nation, from);
+        port_memo_to_member(memo_itr->account, memo_itr->request, memo_itr->nation);
         memos.erase(memo_itr);
       }
       by_time.erase(pick);
@@ -133,7 +133,7 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
   auto pending_memo = memos.find(invited_account.value);
   if (pending_memo != memos.end()) {
     if (welcomed_now) {
-      port_memo_to_member(pending_memo->account, pending_memo->request, pending_memo->nation, from);
+      port_memo_to_member(pending_memo->account, pending_memo->request, pending_memo->nation);
     }
     memos.erase(pending_memo);
   }
@@ -194,12 +194,13 @@ void easyinvite::on_transfer(name from, name to, asset quantity, string memo) {
 // === Request Invite === //
 // --- Adds an account to the paid-invite request queue --- //
 
-void easyinvite::ask4invite(name account, name requester, string request, string nation_iso3) {
+void easyinvite::ask4invite(name account, name requester, string request, string nation) {
   require_auth(requester);
   check(is_account(account), "Requested account does not exist");
   check(is_account(requester), "Requester account does not exist");
   check(!request.empty(), "Invite request message is required");
   check(request.size() <= 220, "Invite request message must be 220 characters or less");
+  check(!nation.empty(), "Nation is required");
 
   config_table conf(get_self(), get_self().value);
   auto cfg = conf.get_or_default();
@@ -212,10 +213,19 @@ void easyinvite::ask4invite(name account, name requester, string request, string
   check(requests.find(account.value) == requests.end(), "This account already has a pending invite request");
 
   invite_memos_table memos(get_self(), get_self().value);
+  const uint32_t nation_code = is_valid_country(0, nation);
 
-  uint32_t nation = 0;
-  if (!nation_iso3.empty()) {
-    nation = is_valid_country(0, nation_iso3);
+  auto by_time = requests.get_index<"bytime"_n>();
+  uint32_t checked = 0;
+  if (by_time.begin() != by_time.end()) {
+    auto itr = by_time.end();
+    do {
+      --itr;
+      if (auto m = memos.find(itr->account.value); m != memos.end() && m->request == request) {
+        check(false, "This invite message is already in use");
+      }
+      if (++checked >= 20) break;
+    } while (itr != by_time.begin());
   }
 
   requests.emplace(requester, [&](auto& row) {
@@ -227,7 +237,7 @@ void easyinvite::ask4invite(name account, name requester, string request, string
   memos.emplace(requester, [&](auto& row) {
     row.account = account;
     row.request = request;
-    row.nation = nation;
+    row.nation = nation_code;
   });
 }//END ask4invite()
 
@@ -246,7 +256,7 @@ void easyinvite::cleanasks() {
     ++examined;
     if (adopters.find(itr->account.value) != adopters.end()) {
       if (auto memo_itr = memos.find(itr->account.value); memo_itr != memos.end()) {
-        port_memo_to_member(memo_itr->account, memo_itr->request, memo_itr->nation, get_self());
+        port_memo_to_member(memo_itr->account, memo_itr->request, memo_itr->nation);
         memos.erase(memo_itr);
       }
       itr = by_time.erase(itr);
@@ -256,8 +266,8 @@ void easyinvite::cleanasks() {
   }
 }//END cleanasks()
 
-// === Clean Legacy Invite Requests === //
-// --- Drops queue rows with no invite memo (oldest 12 checked) --- //
+// === Clean Incomplete Invite Requests === //
+// --- Drops queue rows with no memo, message, or nation (up to 999 oldest checked) --- //
 
 void easyinvite::cleannomemo() {
   invite_requests_table requests(get_self(), get_self().value);
@@ -268,7 +278,9 @@ void easyinvite::cleannomemo() {
   auto itr = by_time.begin();
   while (itr != by_time.end() && examined < 999) {
     ++examined;
-    if (memos.find(itr->account.value) == memos.end()) {
+    auto memo_itr = memos.find(itr->account.value);
+    if (memo_itr == memos.end() || memo_itr->request.empty() || memo_itr->nation == 0) {
+      if (memo_itr != memos.end()) memos.erase(memo_itr);
       itr = by_time.erase(itr);
     } else {
       ++itr;
@@ -279,7 +291,7 @@ void easyinvite::cleannomemo() {
 // === Update Member Info === //
 // --- Member updates profile info, nation, and link --- //
 
-void easyinvite::updateinfo(name account, string info, string nation_iso3, string link) {
+void easyinvite::updateinfo(name account, string info, string nation, string link) {
   require_auth(account);
 
   adopters_table adopters(get_self(), get_self().value);
@@ -287,9 +299,9 @@ void easyinvite::updateinfo(name account, string info, string nation_iso3, strin
   check(!info.empty(), "Info is required");
   check(info.size() <= 500, "Info must be 500 characters or less");
 
-  uint32_t nation = 0;
-  if (!nation_iso3.empty()) {
-    nation = is_valid_country(0, nation_iso3);
+  uint32_t nation_code = 0;
+  if (!nation.empty()) {
+    nation_code = is_valid_country(0, nation);
   }
 
   string clean_link;
@@ -310,13 +322,13 @@ void easyinvite::updateinfo(name account, string info, string nation_iso3, strin
     memberinfo.emplace(account, [&](auto& row) {
       row.account = account;
       row.info = info;
-      row.nation = nation;
+      row.nation = nation_code;
       row.link = clean_link;
     });
   } else {
     memberinfo.modify(itr, same_payer, [&](auto& row) {
       row.info = info;
-      row.nation = nation;
+      row.nation = nation_code;
       row.link = clean_link;
     });
   }
@@ -535,7 +547,7 @@ void easyinvite::deleteuser(name user) {
 // === Delete Invite Request === //
 // --- Contract-only removal from queue and memo tables --- //
 
-void easyinvite::delinvreq(name account) {
+void easyinvite::delrequest(name account) {
   require_auth(get_self());
 
   invite_requests_table requests(get_self(), get_self().value);
@@ -551,12 +563,12 @@ void easyinvite::delinvreq(name account) {
     removed = true;
   }
   check(removed, "❇️ No pending invite request found for this account");
-}//END delinvreq()
+}//END delrequest()
 
-void easyinvite::port_memo_to_member(name account, const string& info, uint32_t nation, name payer) {
+void easyinvite::port_memo_to_member(name account, const string& info, uint32_t nation) {
   member_info_table memberinfo(get_self(), get_self().value);
   if (memberinfo.find(account.value) != memberinfo.end()) return;
-  memberinfo.emplace(payer, [&](auto& row) {
+  memberinfo.emplace(get_self(), [&](auto& row) {
     row.account = account;
     row.info = info;
     row.nation = nation;

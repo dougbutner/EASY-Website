@@ -27,7 +27,17 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { ASK4INVITE_MESSAGE_MAX, formatAsk4InviteCharCount } from '@/constants/ask4inviteUi';
+import {
+  ASK4INVITE_ACCOUNT_LABEL,
+  ASK4INVITE_MESSAGE_LABEL,
+  ASK4INVITE_CHAR_COUNT_HINT,
+  ASK4INVITE_MESSAGE_MAX,
+  ASK4INVITE_NOMINATION_NOTE,
+  ask4inviteGlassFieldClass,
+  ask4inviteGlassPanelClass,
+  formatAsk4InviteCharCount,
+  welcomeStatusPanelClass,
+} from '@/constants/ask4inviteUi';
 import { pickRandomWonVariant, TOKEN_LOGO } from '@/constants/tokenAssets';
 import { useProton } from '@/hooks/useProton';
 import { cn } from '@/lib/utils';
@@ -62,15 +72,18 @@ import {
   fetchEasyInviteAccountStatus,
   fetchEasyInviteAdopter,
   EASY_REWELCOME_MEMO,
+  fetchEasyInvitePendingInvites,
   fetchEasyInviteProgramStatus,
-  fetchEasyInviteRequests,
-  fetchInviteRequestMessages,
   welcomeBackMinimumEasy,
   type EasyInviteAccountStatus,
+  type EasyInvitePendingInvite,
   type EasyInviteProgramStatus,
-  type EasyInviteRequest,
 } from '@/services/easyInvite';
-import { postInviteRequestMessage } from '@/services/inviteMessageSheet';
+import {
+  formatEasyInviteNationAbbrev,
+  formatEasyInviteNationName,
+  getEasyInviteNationByCode,
+} from '@/constants/easyInviteNations';
 import { fetchBridgeEasySnapshot, type BridgeEasySnapshot } from '@/services/easyBalance';
 import { signUnbroadcastWebAuthTransaction, isStorexWebAuthSigner } from '@/services/walletSessions';
 import {
@@ -289,8 +302,7 @@ const featureCards = [
 const firstFoldJumpLinks = [
   { id: 'flex-tools', emoji: '💸', label: 'Send it' },
   { id: 'bridge', emoji: '🌉', label: 'Solana XPR Bridge' },
-  { id: 'easy-life', emoji: '🤝', label: 'Welcome Friend' },
-  { id: 'ask4invite', emoji: '🙌', label: 'ask4invite', opensAsk4Invite: true as const },
+  { id: 'ask4invite', emoji: '🙌', label: 'Request Welcome now', opensAsk4Invite: true as const },
   { id: 'community-chat', emoji: '💬', label: 'Community Chat', href: 'https://t.me/flextokens' },
 ] as const;
 
@@ -557,9 +569,10 @@ const Index = () => {
   const [askWelcomeMessage, setAskWelcomeMessage] = useState('');
   const [askWelcomeNation, setAskWelcomeNation] = useState('');
   const [ask4InviteOpen, setAsk4InviteOpen] = useState(false);
-  const [inviteRequests, setInviteRequests] = useState<EasyInviteRequest[]>([]);
-  const [inviteRequestsLoading, setInviteRequestsLoading] = useState(false);
-  const [inviteRequestMessages, setInviteRequestMessages] = useState<Record<string, string>>({});
+  const [ask4InviteNominate, setAsk4InviteNominate] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState<EasyInvitePendingInvite[]>([]);
+  const [pendingInvitesLoading, setPendingInvitesLoading] = useState(false);
+  const [pendingInviteNationFilter, setPendingInviteNationFilter] = useState<string>('all');
   const [expandedInviteRequest, setExpandedInviteRequest] = useState<InviteQueueRequestDetail | null>(null);
   const [reflectionPoolBySymbol, setReflectionPoolBySymbol] = useState<Record<string, string | null>>({});
   const [reflectionPoolLoading, setReflectionPoolLoading] = useState(false);
@@ -746,47 +759,46 @@ const Index = () => {
 
   useEffect(() => {
     if (!actor || loading || !inviteProgramStatus?.inProgram) {
-      setInviteRequests([]);
-      setInviteRequestsLoading(false);
+      setPendingInvites([]);
+      setPendingInvitesLoading(false);
       return;
     }
     let cancelled = false;
-    setInviteRequestsLoading(true);
-    fetchEasyInviteRequests()
+    setPendingInvitesLoading(true);
+    fetchEasyInvitePendingInvites()
       .then((rows) => {
-        if (!cancelled) setInviteRequests(rows);
+        if (!cancelled) setPendingInvites(rows);
       })
       .catch(() => {
-        if (!cancelled) setInviteRequests([]);
+        if (!cancelled) setPendingInvites([]);
       })
       .finally(() => {
-        if (!cancelled) setInviteRequestsLoading(false);
+        if (!cancelled) setPendingInvitesLoading(false);
       });
     return () => {
       cancelled = true;
     };
   }, [actor, loading, inviteProgramStatus?.inProgram, chainReadEpoch]);
 
-  useEffect(() => {
-    if (!inviteRequests.length) {
-      setInviteRequestMessages({});
-      return;
-    }
-    let cancelled = false;
-    fetchInviteRequestMessages(inviteRequests.map((row) => row.account))
-      .then((map) => {
-        if (cancelled) return;
-        const messages: Record<string, string> = {};
-        for (const [account, row] of map) messages[account] = row.message;
-        setInviteRequestMessages(messages);
+  const pendingInviteNationOptions = useMemo(() => {
+    const codes = [...new Set(pendingInvites.map((row) => row.nation))].sort((a, b) => a - b);
+    return codes
+      .map((code) => {
+        const nation = getEasyInviteNationByCode(code);
+        if (!nation) return null;
+        return { code, nation };
       })
-      .catch(() => {
-        if (!cancelled) setInviteRequestMessages({});
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [inviteRequests]);
+      .filter((row): row is { code: number; nation: NonNullable<ReturnType<typeof getEasyInviteNationByCode>> } =>
+        row !== null
+      );
+  }, [pendingInvites]);
+
+  const filteredPendingInvites = useMemo(() => {
+    if (pendingInviteNationFilter === 'all') return pendingInvites;
+    const code = Number(pendingInviteNationFilter);
+    if (!Number.isFinite(code)) return pendingInvites;
+    return pendingInvites.filter((row) => row.nation === code);
+  }, [pendingInvites, pendingInviteNationFilter]);
 
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1235,8 +1247,9 @@ const Index = () => {
         toast.error('Connect a wallet first.');
         return;
       }
-      if (inviteProgramStatus?.inProgram) {
-        toast.error('You are already in the Welcome Program.');
+      const accountNorm = account.trim().toLowerCase();
+      if (inviteProgramStatus?.inProgram && accountNorm === actor) {
+        toast.error('You are already in the Welcome Program. Enter another account to nominate.');
         return;
       }
       if (!EASY_INVITE_ACCOUNT_RE.test(requester) || !EASY_INVITE_ACCOUNT_RE.test(account)) {
@@ -1264,11 +1277,10 @@ const Index = () => {
         {
           account: EASY_INVITE_CONTRACT,
           name: 'ask4invite',
-          data: { account, requester, request, nation_iso3: nationIso3 },
+          data: { account, requester, request, nation: nationIso3 },
         },
       ]);
 
-      void postInviteRequestMessage(account, requester, request).catch(() => {});
       setAsk4InviteOpen(false);
     },
     [actor, inviteProgramStatus?.inProgram, isLoggedIn, submitAction]
@@ -1289,8 +1301,11 @@ const Index = () => {
     });
   };
 
-  const openAsk4InviteDialog = () => {
-    scrollToSection('easy-life-status');
+  const openAsk4InviteDialog = (options?: { nominate?: boolean }) => {
+    setAsk4InviteNominate(Boolean(options?.nominate));
+    if (!options?.nominate) {
+      scrollToSection('easy-life-status');
+    }
     setAsk4InviteOpen(true);
   };
 
@@ -1948,6 +1963,44 @@ const Index = () => {
                 Swap INDEX
               </a>
             </GlassCard>
+
+            <GlassCard className="flex min-h-72 flex-col p-6">
+              <div className="flex items-start justify-between gap-4">
+                <TokenThumb src={TOKEN_LOGO.PEOPLES} alt="PEOPLES" className="h-14 w-14 rounded-xl" />
+                <a
+                  href="https://explorer.xprnetwork.org/account/xpr.m3m3?loadContract=true&tab=actions&account=xpr.m3m3&scope=xpr.m3m3&limit=100"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-yellow-300/20 px-3 py-1 text-xs font-bold text-yellow-200 underline-offset-2 hover:bg-yellow-300 hover:text-black hover:underline"
+                >
+                  xpr.m3m3
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <h3 className="mt-6 text-4xl font-black text-yellow-50">PEOPLES</h3>
+              <p className="mt-2 text-sm font-bold uppercase tracking-[0.14em] text-yellow-200/90">PEOPLES@xpr.m3m3</p>
+              <p className="mt-4 flex-1 leading-7 text-yellow-100/65">
+                Peoples Pupils is a crypto token that I hope will make a lot of people happy. Created by 8 year old nephew
+                of EASY dev. For entertainment purposes only.
+              </p>
+              <a
+                href="https://alcor.exchange/v/xpr/analytics/tokens/peoples-xpr.m3m3"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.14em] text-yellow-300 underline-offset-2 hover:text-yellow-100 hover:underline"
+              >
+                Alcor analytics
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-80" />
+              </a>
+              <a
+                href="https://alcor.exchange/v/xpr/swap?input=XUSDC-xtokens&output=PEOPLES-xpr.m3m3"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center justify-center rounded-full border border-yellow-300/25 px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-yellow-200 hover:bg-yellow-300 hover:text-black"
+              >
+                Swap PEOPLES
+              </a>
+            </GlassCard>
             </div>
           </div>
         </SnapSection>
@@ -2346,8 +2399,9 @@ const Index = () => {
           id="easy-life-status"
           eyebrow="Program status"
           title="Your Welcome Program status"
+          className="min-h-0 overflow-x-hidden overflow-y-visible py-14 sm:min-h-screen sm:overflow-hidden sm:py-0"
         >
-          <GlassCard className="w-full max-w-7xl p-5 sm:p-6">
+          <GlassCard className="w-full max-w-7xl p-4 sm:p-6">
             <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
               <div className="rounded-[1.5rem] border border-yellow-300/15 bg-black/55 p-5">
                 <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300">Current account</p>
@@ -2416,9 +2470,9 @@ const Index = () => {
                 ) : null}
               </div>
 
-              <div className="rounded-[1.5rem] border border-yellow-300/15 bg-black/55 p-5">
+              <div className={welcomeStatusPanelClass}>
                 {inviteProgramStatus?.inProgram ? (
-                  <>
+                  <div className="flex flex-col gap-4">
                     <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300">
                       Pending welcome requests
                     </p>
@@ -2428,54 +2482,109 @@ const Index = () => {
                       <code className={codeInlineClass}>invrequests</code>). Welcome the oldest next with a paid
                       transfer memo starting with <code className={codeInlineClass}>*|</code>.
                     </p>
-                    {inviteRequestsLoading ? (
+                    {pendingInvitesLoading ? (
                       <p className="mt-4 text-sm text-yellow-100/55">Loading queue…</p>
-                    ) : inviteRequests.length === 0 ? (
+                    ) : pendingInvites.length === 0 ? (
                       <p className="mt-4 text-sm text-yellow-100/55">No pending requests right now.</p>
                     ) : (
-                      <div className="mt-4 max-h-72 overflow-auto rounded-xl border border-yellow-300/15">
-                        <table className="w-full text-left text-sm">
-                          <thead className="sticky top-0 bg-yellow-300/10 text-xs uppercase tracking-[0.16em] text-yellow-200">
-                            <tr>
-                              <th className="px-3 py-2">Account</th>
-                              <th className="px-3 py-2">Requester</th>
-                              <th className="px-3 py-2">Message</th>
-                              <th className="px-3 py-2">Requested</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-yellow-300/10 text-yellow-100/75">
-                            {inviteRequests.map((row) => (
-                              <tr key={row.account}>
-                                <td className="px-3 py-2 font-mono">{row.account}</td>
-                                <td className="px-3 py-2 font-mono">{row.requester}</td>
-                                <td className="max-w-[8rem] px-3 py-2 text-yellow-100/70">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setExpandedInviteRequest({
-                                        account: row.account,
-                                        requester: row.requester,
-                                        message: inviteRequestMessages[row.account] ?? '',
-                                      })
-                                    }
-                                    className="max-w-full truncate text-left font-mono text-xs text-yellow-200/90 underline decoration-yellow-300/30 underline-offset-2 hover:text-yellow-50"
-                                    title="Welcome this request"
-                                  >
-                                    {truncateInviteMessage(inviteRequestMessages[row.account] ?? '')}
-                                  </button>
-                                </td>
-                                <td className="px-3 py-2 text-yellow-100/55">
-                                  {row.requestedAt
-                                    ? new Date(row.requestedAt * 1000).toLocaleString()
-                                    : '—'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      <>
+                        {pendingInviteNationOptions.length > 1 ? (
+                          <div className="mt-4 flex flex-wrap items-center gap-2">
+                            <Label htmlFor="pending-invite-nation-filter" className="text-xs text-yellow-100/60">
+                              Nation
+                            </Label>
+                            <Select
+                              value={pendingInviteNationFilter}
+                              onValueChange={setPendingInviteNationFilter}
+                            >
+                              <SelectTrigger
+                                id="pending-invite-nation-filter"
+                                className="h-9 w-full max-w-xs border-yellow-300/20 bg-black/50 text-yellow-50 sm:w-56"
+                              >
+                                <SelectValue placeholder="All nations" />
+                              </SelectTrigger>
+                              <SelectContent className="border-yellow-300/20 bg-black/95 text-yellow-50">
+                                <SelectItem value="all">All nations</SelectItem>
+                                {pendingInviteNationOptions.map(({ code, nation }) => (
+                                  <SelectItem key={code} value={String(code)}>
+                                    {nation.flag ? `${nation.flag} ` : ''}
+                                    {nation.name}
+                                    <span className="ml-1 font-mono text-[10px] uppercase text-yellow-100/40">
+                                      {nation.iso3}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : null}
+                        {filteredPendingInvites.length === 0 ? (
+                          <p className="mt-4 text-sm text-yellow-100/55">No requests for this nation.</p>
+                        ) : (
+                          <div className="mt-4 max-h-72 overflow-auto rounded-xl border border-yellow-300/15 [-webkit-overflow-scrolling:touch]">
+                            <table className="w-full min-w-[36rem] text-left text-sm">
+                              <thead className="sticky top-0 bg-yellow-300/10 text-xs uppercase tracking-[0.16em] text-yellow-200">
+                                <tr>
+                                  <th className="px-3 py-2">Account</th>
+                                  <th className="px-3 py-2">Requester</th>
+                                  <th className="px-3 py-2">Nation</th>
+                                  <th className="px-3 py-2">Message</th>
+                                  <th className="px-3 py-2">Requested</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-yellow-300/10 text-yellow-100/75">
+                                {filteredPendingInvites.map((row) => (
+                                  <tr key={row.account}>
+                                    <td className="px-3 py-2 font-mono">{row.account}</td>
+                                    <td className="px-3 py-2 font-mono">{row.requester}</td>
+                                    <td className="max-w-[10rem] px-3 py-2 text-yellow-100/80">
+                                      <span className="line-clamp-2 text-xs leading-snug">
+                                        {formatEasyInviteNationName(row.nation) ||
+                                          formatEasyInviteNationAbbrev(row.nation) ||
+                                          '—'}
+                                      </span>
+                                    </td>
+                                    <td className="max-w-[8rem] px-3 py-2 text-yellow-100/70">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setExpandedInviteRequest({
+                                            account: row.account,
+                                            requester: row.requester,
+                                            message: row.message,
+                                            nation: row.nation,
+                                          })
+                                        }
+                                        className="max-w-full truncate text-left font-mono text-xs text-yellow-200/90 underline decoration-yellow-300/30 underline-offset-2 hover:text-yellow-50"
+                                        title="Welcome this request"
+                                      >
+                                        {truncateInviteMessage(row.message)}
+                                      </button>
+                                    </td>
+                                    <td className="px-3 py-2 text-yellow-100/55">
+                                      {row.requestedAt
+                                        ? new Date(row.requestedAt * 1000).toLocaleString()
+                                        : '—'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </>
                     )}
-                  </>
+                    <div className="flex justify-end pt-1">
+                      <Button
+                        type="button"
+                        onClick={() => openAsk4InviteDialog({ nominate: true })}
+                        disabled={!isLoggedIn || inviteProgramLoading}
+                        className="w-full rounded-xl bg-yellow-300 text-black hover:bg-yellow-200 disabled:opacity-40 sm:w-auto"
+                      >
+                        Nominate someone
+                      </Button>
+                    </div>
+                  </div>
                 ) : (
                   <>
                     <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300">Request a welcome</p>
@@ -2496,59 +2605,72 @@ const Index = () => {
                         Tell us why in Telegram
                       </a>
                     </p>
-                    <div className="mt-4 space-y-2">
-                      <Label htmlFor="ask-welcome-account" className="text-yellow-100/80">
-                        My account
-                      </Label>
-                      <Input
-                        id="ask-welcome-account"
-                        value={askWelcomeAccount}
-                        onChange={(event) => setAskWelcomeAccount(event.target.value.toLowerCase())}
-                        placeholder="accountname"
-                        className="border-yellow-300/20 bg-black/70 font-mono text-yellow-50"
-                      />
-                    </div>
-                    <div className="mt-3 space-y-2">
-                      <Label htmlFor="ask-welcome-message" className="text-yellow-100/80">
-                        I want to join the EASY Life because
-                      </Label>
-                      <textarea
-                        id="ask-welcome-message"
-                        value={askWelcomeMessage}
-                        onChange={(event) => {
-                          const next = event.target.value;
-                          setAskWelcomeMessage(
-                            next.length > ASK4INVITE_MESSAGE_MAX ? next.slice(0, ASK4INVITE_MESSAGE_MAX) : next
-                          );
-                        }}
-                        className="min-h-[96px] w-full resize-y rounded-md border border-yellow-300/20 bg-black/70 px-3 py-2 text-sm text-yellow-50 placeholder:text-yellow-100/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/40"
-                      />
-                      <p className="text-xs text-yellow-100/45">
-                        {formatAsk4InviteCharCount(askWelcomeMessage.length)}
-                      </p>
-                    </div>
-                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-                      <div className="min-w-0 flex-1">
-                        <InviteNationSelect
-                          id="ask-welcome-nation"
-                          value={askWelcomeNation}
-                          onValueChange={setAskWelcomeNation}
+                    <div className={cn('mt-4 space-y-4', ask4inviteGlassPanelClass)}>
+                      <div className="space-y-2">
+                        <Label htmlFor="ask-welcome-account" className="text-yellow-100/80">
+                          {ASK4INVITE_ACCOUNT_LABEL}
+                        </Label>
+                        <Input
+                          id="ask-welcome-account"
+                          value={askWelcomeAccount}
+                          onChange={(event) => setAskWelcomeAccount(event.target.value.toLowerCase())}
+                          placeholder="accountname"
+                          className={cn('font-mono', ask4inviteGlassFieldClass)}
                         />
                       </div>
-                      <Button
-                        type="button"
-                        onClick={requestWelcome}
-                        disabled={
-                          !isLoggedIn ||
-                          submitting !== null ||
-                          inviteProgramLoading ||
-                          inviteProgramStatus?.inProgram === true ||
-                          !askWelcomeNation
-                        }
-                        className="w-full shrink-0 bg-yellow-300 text-black hover:bg-yellow-200 disabled:opacity-40 sm:w-auto sm:min-w-[11rem]"
-                      >
-                        {submitting === 'Request a welcome' ? 'Submitting…' : 'Request a welcome'}
-                      </Button>
+                      <div className="space-y-2">
+                        <Label htmlFor="ask-welcome-message" className="text-yellow-100/80">
+                          {ASK4INVITE_MESSAGE_LABEL}
+                        </Label>
+                        <textarea
+                          id="ask-welcome-message"
+                          value={askWelcomeMessage}
+                          onChange={(event) => {
+                            const next = event.target.value;
+                            setAskWelcomeMessage(
+                              next.length > ASK4INVITE_MESSAGE_MAX ? next.slice(0, ASK4INVITE_MESSAGE_MAX) : next
+                            );
+                          }}
+                          className={cn(
+                            'min-h-[96px] w-full resize-y px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2',
+                            ask4inviteGlassFieldClass
+                          )}
+                        />
+                        <p className="min-w-0 break-words text-xs leading-relaxed text-yellow-100/45">
+                          <span className="font-medium text-yellow-100/55">
+                            {formatAsk4InviteCharCount(askWelcomeMessage.length)}
+                          </span>
+                          <span aria-hidden className="mx-1 hidden sm:inline">
+                            |
+                          </span>
+                          <span className="mt-0.5 block sm:mt-0 sm:inline">{ASK4INVITE_CHAR_COUNT_HINT}</span>
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                        <div className="min-w-0 flex-1">
+                          <InviteNationSelect
+                            id="ask-welcome-nation"
+                            value={askWelcomeNation}
+                            onValueChange={setAskWelcomeNation}
+                            triggerClassName={ask4inviteGlassFieldClass}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={requestWelcome}
+                          disabled={
+                            !isLoggedIn ||
+                            submitting !== null ||
+                            inviteProgramLoading ||
+                            inviteProgramStatus?.inProgram === true ||
+                            !askWelcomeNation
+                          }
+                          className="w-full shrink-0 rounded-xl bg-yellow-300 text-black hover:bg-yellow-200 disabled:opacity-40 sm:w-auto sm:min-w-[11rem]"
+                        >
+                          {submitting === 'Request a welcome' ? 'Submitting…' : 'Request a welcome'}
+                        </Button>
+                      </div>
+                      <p className="text-xs leading-relaxed text-yellow-100/50">{ASK4INVITE_NOMINATION_NOTE}</p>
                     </div>
                   </>
                 )}
@@ -2565,12 +2687,16 @@ const Index = () => {
           />
           <Ask4InviteDialog
             open={ask4InviteOpen}
-            onOpenChange={setAsk4InviteOpen}
+            onOpenChange={(open) => {
+              setAsk4InviteOpen(open);
+              if (!open) setAsk4InviteNominate(false);
+            }}
             actor={actor}
             isLoggedIn={isLoggedIn}
             inProgram={inviteProgramStatus?.inProgram === true}
             programLoading={inviteProgramLoading}
             submitting={submitting}
+            nominateSomeone={ask4InviteNominate}
             onSubmit={submitAsk4Invite}
           />
         </SnapSection>

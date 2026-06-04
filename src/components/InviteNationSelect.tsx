@@ -16,6 +16,7 @@ import {
   EASY_INVITE_NATIONS,
   type EasyInviteNation,
 } from '@/constants/easyInviteNations';
+import { ask4inviteGlassFieldClass, ask4inviteGlassPopoverClass } from '@/constants/ask4inviteUi';
 import { cn } from '@/lib/utils';
 
 type InviteNationSelectProps = {
@@ -50,7 +51,7 @@ export function InviteNationSelect({
   label = 'Nation',
   value,
   onValueChange,
-  triggerClassName = 'border-yellow-300/20 bg-black/70 text-yellow-50',
+  triggerClassName = ask4inviteGlassFieldClass,
 }: InviteNationSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -91,7 +92,7 @@ export function InviteNationSelect({
               }
             }}
             className={cn(
-              'h-10 w-full justify-between font-normal hover:bg-black/70',
+              'h-10 w-full justify-between font-normal hover:bg-black/40',
               triggerClassName,
               !selected && 'text-yellow-100/45'
             )}
@@ -112,17 +113,20 @@ export function InviteNationSelect({
         <PopoverContent
           id={`${id}-listbox`}
           align="start"
-          className="w-[min(100vw-2rem,var(--radix-popover-trigger-width))] border-yellow-300/20 bg-black p-0 text-yellow-50 sm:w-[var(--radix-popover-trigger-width)]"
+          className={cn(
+            'w-[min(100vw-2rem,var(--radix-popover-trigger-width))] sm:w-[var(--radix-popover-trigger-width)]',
+            ask4inviteGlassPopoverClass
+          )}
         >
           <Command
             value={search}
             onValueChange={setSearch}
             filter={(itemValue, query) => (nationMatchesSearchByValue(itemValue, query) ? 1 : 0)}
-            className="bg-black text-yellow-50"
+            className="bg-transparent text-yellow-50"
           >
             <CommandInput
               placeholder="Type a country name or code…"
-              className="h-11 border-yellow-300/15 text-yellow-50 placeholder:text-yellow-100/40"
+              className="h-11 rounded-t-xl border-yellow-300/15 bg-black/25 text-yellow-50 placeholder:text-yellow-100/40"
             />
             <CommandList className="max-h-72">
               <CommandEmpty className="py-6 text-sm text-yellow-100/55">

@@ -6,6 +6,7 @@ export const TOKEN_LOGO = {
   GRAMS: '/assets/tokens/grams/grams-512.png',
   HARD: '/assets/tokens/hard/HARD-v2-glow.png',
   INDEX: '/assets/tokens/index/INDEX_xfund.png',
+  PEOPLES: '/assets/tokens/peoples/peoples.png',
 } as const;
 
 const WON_DIR = '/assets/tokens/won';

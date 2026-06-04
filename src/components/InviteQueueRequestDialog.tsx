@@ -27,12 +27,15 @@ import {
   welcomeBackMinimumEasy,
   type EasyInviteAccountStatus,
 } from '@/services/easyInvite';
+import { formatEasyInviteNationName } from '@/constants/easyInviteNations';
 import { formatFlexAssetPretty } from '@/services/flexFlexerBalance';
 
 export type InviteQueueRequestDetail = {
   account: string;
   requester: string;
   message: string;
+  /** On-chain nation code from `invreqmemo` when opening from the welcome queue. */
+  nation?: number;
   /** Preloaded from `adopters` table when opening from the network graph. */
   score?: number;
   banked?: string;
@@ -205,7 +208,7 @@ export function InviteQueueRequestDialog({
     <Dialog open={detail !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         overlayClassName="bg-black/70 backdrop-blur-md"
-        className="max-w-lg gap-5 border-yellow-300/20 bg-black/95 text-yellow-50 shadow-2xl sm:max-w-xl sm:rounded-2xl"
+        className="box-border min-w-0 max-w-[calc(100vw-2rem)] gap-5 overflow-x-hidden overflow-y-auto overscroll-contain border-yellow-300/20 bg-black/95 text-yellow-50 shadow-2xl sm:max-w-xl sm:rounded-2xl"
       >
         <DialogHeader className="text-left">
           <DialogTitle className="text-xl font-black text-yellow-50">
@@ -220,6 +223,15 @@ export function InviteQueueRequestDialog({
 
         {detail ? (
           <div className="grid gap-4">
+            {detail.nation ? (
+              <div className="space-y-1">
+                <Label className="text-yellow-100/80">Nation</Label>
+                <p className="whitespace-pre-wrap rounded-md border border-yellow-300/20 bg-black/70 px-3 py-2 text-sm leading-relaxed text-yellow-100/85">
+                  {formatEasyInviteNationName(detail.nation) || '—'}
+                </p>
+              </div>
+            ) : null}
+
             {detail.message.trim() ? (
               <div className="space-y-1">
                 <Label className="text-yellow-100/80">Their request message</Label>

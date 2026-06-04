@@ -10,11 +10,23 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { InviteNationSelect } from '@/components/InviteNationSelect';
 import { TurnstileWidget, isTurnstileConfigured } from '@/components/TurnstileWidget';
-import { ASK4INVITE_MESSAGE_MAX, formatAsk4InviteCharCount } from '@/constants/ask4inviteUi';
+import {
+  ASK4INVITE_ACCOUNT_LABEL,
+  ASK4INVITE_CHAR_COUNT_HINT,
+  ASK4INVITE_MESSAGE_LABEL,
+  ASK4INVITE_MESSAGE_MAX,
+  ASK4INVITE_NOMINATION_NOTE,
+  ask4inviteDialogOverlayClass,
+  ask4inviteGlassDialogClass,
+  ask4inviteGlassFieldClass,
+  ask4inviteGlassPanelClass,
+  formatAsk4InviteCharCount,
+} from '@/constants/ask4inviteUi';
 import { cn } from '@/lib/utils';
 
 const EASY_INVITE_ACCOUNT_RE = /^[a-z1-5.]{1,12}$/;
-const codeInlineClass = 'rounded bg-yellow-300/10 px-1 py-0.5 text-[0.9em] text-yellow-200';
+const codeInlineClass =
+  'whitespace-normal break-words rounded bg-yellow-300/10 px-1 py-0.5 text-[0.9em] text-yellow-200';
 
 export type Ask4InviteSubmitPayload = {
   account: string;
@@ -31,6 +43,8 @@ type Ask4InviteDialogProps = {
   inProgram: boolean;
   programLoading: boolean;
   submitting: string | null;
+  /** When true, account field starts empty for sponsoring another account. */
+  nominateSomeone?: boolean;
   onSubmit: (payload: Ask4InviteSubmitPayload) => void;
 };
 
@@ -42,6 +56,7 @@ export function Ask4InviteDialog({
   inProgram,
   programLoading,
   submitting,
+  nominateSomeone = false,
   onSubmit,
 }: Ask4InviteDialogProps) {
   const [account, setAccount] = useState('');
@@ -52,19 +67,25 @@ export function Ask4InviteDialog({
   useEffect(() => {
     if (!open) return;
     setTurnstileToken(isTurnstileConfigured() ? null : 'bypass');
-    if (actor) setAccount(actor);
-  }, [open, actor]);
+    if (nominateSomeone) {
+      setAccount('');
+    } else if (actor) {
+      setAccount(actor);
+    }
+  }, [open, actor, nominateSomeone]);
 
+  const accountNorm = account.trim().toLowerCase();
   const requestText = message.trim() || 'Requesting welcome via flex.town';
   const turnstileReady = !isTurnstileConfigured() || Boolean(turnstileToken);
+  const selfRequestWhileInProgram = inProgram && Boolean(actor) && accountNorm === actor;
   const canSubmit =
     isLoggedIn &&
     Boolean(actor) &&
-    !inProgram &&
+    !selfRequestWhileInProgram &&
     !programLoading &&
     submitting === null &&
     nationIso3.length > 0 &&
-    EASY_INVITE_ACCOUNT_RE.test(account.trim().toLowerCase()) &&
+    EASY_INVITE_ACCOUNT_RE.test(accountNorm) &&
     requestText.length > 0 &&
     requestText.length <= ASK4INVITE_MESSAGE_MAX &&
     turnstileReady;
@@ -82,15 +103,19 @@ export function Ask4InviteDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        overlayClassName="bg-black/70 backdrop-blur-md"
-        className="max-h-[min(92vh,820px)] max-w-lg gap-5 overflow-y-auto border-yellow-300/20 bg-black/95 text-yellow-50 shadow-2xl sm:max-w-xl sm:rounded-2xl"
+        overlayClassName={ask4inviteDialogOverlayClass}
+        className={ask4inviteGlassDialogClass}
       >
-        <DialogHeader className="text-left">
-          <DialogTitle className="text-xl font-black text-yellow-50">Request a welcome</DialogTitle>
-          <p className="text-sm font-black uppercase tracking-[0.18em] text-yellow-300">Join the invite queue</p>
+        <DialogHeader className="min-w-0 text-left">
+          <DialogTitle className="text-lg font-black text-yellow-50 sm:text-xl">
+            {nominateSomeone || (inProgram && accountNorm !== actor) ? 'Nominate someone' : 'Request a welcome'}
+          </DialogTitle>
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-yellow-300 sm:text-sm sm:tracking-[0.18em]">
+            Join the invite queue
+          </p>
         </DialogHeader>
 
-        <p className="text-sm leading-7 text-yellow-100/65">
+        <p className="min-w-0 break-words rounded-2xl border border-yellow-300/15 bg-black/35 px-3 py-3 text-sm leading-relaxed text-yellow-100/65 sm:px-4 sm:leading-7 sm:bg-black/20 sm:backdrop-blur-md">
           Submits <code className={codeInlineClass}>invite.mon3y::ask4invite</code> on-chain. A generous soul can later
           welcome you with a 200 EASY transfer to <code className={codeInlineClass}>invite.mon3y</code>, memo prefix{' '}
           <code className={codeInlineClass}>*|</code>
@@ -106,23 +131,23 @@ export function Ask4InviteDialog({
           </a>
         </p>
 
-        <div className="grid gap-3">
+        <div className={cn('grid gap-4', ask4inviteGlassPanelClass)}>
           <div className="space-y-2">
             <Label htmlFor="ask4invite-account" className="text-yellow-100/80">
-              My account
+              {ASK4INVITE_ACCOUNT_LABEL}
             </Label>
             <Input
               id="ask4invite-account"
               value={account}
               onChange={(event) => setAccount(event.target.value.toLowerCase())}
               placeholder="accountname"
-              className="border-yellow-300/20 bg-black/70 font-mono text-yellow-50"
+              className={cn('font-mono', ask4inviteGlassFieldClass)}
             />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="ask4invite-message" className="text-yellow-100/80">
-              I want to join the EASY Life because
+              {ASK4INVITE_MESSAGE_LABEL}
             </Label>
             <textarea
               id="ask4invite-message"
@@ -131,19 +156,31 @@ export function Ask4InviteDialog({
                 const next = event.target.value;
                 setMessage(next.length > ASK4INVITE_MESSAGE_MAX ? next.slice(0, ASK4INVITE_MESSAGE_MAX) : next);
               }}
-              className="min-h-[96px] w-full resize-y rounded-md border border-yellow-300/20 bg-black/70 px-3 py-2 text-sm text-yellow-50 placeholder:text-yellow-100/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/40"
+              className={cn(
+                'min-h-[96px] w-full resize-y px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2',
+                ask4inviteGlassFieldClass
+              )}
             />
-            <p className="text-xs text-yellow-100/45">{formatAsk4InviteCharCount(message.length)}</p>
+            <p className="min-w-0 break-words text-xs leading-relaxed text-yellow-100/45">
+              <span className="font-medium text-yellow-100/55">
+                {formatAsk4InviteCharCount(message.length)}
+              </span>
+              <span aria-hidden className="mx-1 hidden sm:inline">
+                |
+              </span>
+              <span className="mt-0.5 block sm:mt-0 sm:inline">{ASK4INVITE_CHAR_COUNT_HINT}</span>
+            </p>
           </div>
 
-          <TurnstileWidget onToken={setTurnstileToken} className="flex justify-center" />
+          <TurnstileWidget onToken={setTurnstileToken} className="flex min-w-0 justify-center overflow-hidden" />
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1">
               <InviteNationSelect
                 id="ask4invite-nation"
                 value={nationIso3}
                 onValueChange={setNationIso3}
+                triggerClassName={ask4inviteGlassFieldClass}
               />
             </div>
             <Button
@@ -151,13 +188,17 @@ export function Ask4InviteDialog({
               onClick={handleSubmit}
               disabled={!canSubmit}
               className={cn(
-                'w-full shrink-0 bg-yellow-300 text-black hover:bg-yellow-200 sm:w-auto sm:min-w-[11rem]',
+                'w-full shrink-0 rounded-xl bg-yellow-300 text-black hover:bg-yellow-200 sm:w-auto sm:min-w-0 sm:flex-1 sm:basis-40',
                 !canSubmit && 'opacity-40'
               )}
             >
               {submitting === 'Request a welcome' ? 'Submitting…' : 'Request a welcome'}
             </Button>
           </div>
+
+          <p className="min-w-0 break-words text-xs leading-relaxed text-yellow-100/50">
+            {ASK4INVITE_NOMINATION_NOTE}
+          </p>
         </div>
       </DialogContent>
     </Dialog>

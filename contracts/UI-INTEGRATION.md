@@ -104,6 +104,18 @@ Secondary index **`bytime`** — ascending `requested_at`. Oldest request is con
 
 When any paid invite completes for an account (first welcome or re-welcome), that account’s `invrequests` row is **deleted** if present. FIFO processing also drops queue heads that are already in `adopters` before picking the next entry.
 
+### `invreqmemo` table
+
+On-chain personal message and nation for each queued account (same primary key as `invrequests.account`).
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `account` | name | Queued account (primary key) |
+| `request` | string | “Why I want to join” message (max 220 chars) |
+| `nation` | uint32 | Nation code from `is_valid_country` (ISO3 input or numeric code) |
+
+UI should only list queue rows that have a matching memo with non-empty `request` and `nation != 0` (see `cleannomemo`). Nation ints match `contracts/web4/countries.hpp`; frontend maps codes to flag emoji and ISO3 labels.
+
 ### Balances (not in easyinvite ABI)
 
 Read EASY balances from **`mon3y`** token contract `accounts` table:
@@ -194,17 +206,21 @@ Errors the UI may surface:
 
 ### `ask4invite`
 
-Join the paid-invite queue.
+Join the paid-invite queue. Message and nation are stored in `invreqmemo` (UI should hide queue rows without both).
 
 | Param | Type | Description |
 |-------|------|-------------|
 | `account` | name | Account that will receive the invite when funded |
 | `requester` | name | Must sign the transaction (`require_auth(requester)`) |
+| `request` | string | Personal message (required, max 220 chars) |
+| `nation` | string | ISO 3166-1 alpha-3 country code (e.g. `USA`, `MEX`) |
 
 ```json
 {
   "account": "alice",
-  "requester": "alice"
+  "requester": "alice",
+  "request": "Ready to flex with EASY",
+  "nation": "USA"
 }
 ```
 

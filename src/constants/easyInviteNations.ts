@@ -1,3 +1,5 @@
+import { easyInviteIso3FromNationCode } from '@/constants/easyInviteNationCodes';
+
 /** ISO 3166-1 nations accepted by invite.mon3y (from contracts/web4/countries.hpp). */
 export type EasyInviteNation = { iso3: string; name: string; iso2: string; flag: string };
 
@@ -1485,6 +1487,29 @@ export const EASY_INVITE_NATIONS: EasyInviteNation[] = [
     "flag": "🇿🇲"
   }
 ];
+
+const nationByIso3 = new Map(EASY_INVITE_NATIONS.map((n) => [n.iso3, n]));
+
+/** Resolve on-chain nation int to UI nation metadata (flag + ISO3). */
+export function getEasyInviteNationByCode(code: number): EasyInviteNation | null {
+  const iso3 = easyInviteIso3FromNationCode(code);
+  if (!iso3) return null;
+  return nationByIso3.get(iso3) ?? null;
+}
+
+/** Flag emoji + country name for queue/profile display. */
+export function formatEasyInviteNationName(code: number): string {
+  const nation = getEasyInviteNationByCode(code);
+  if (!nation) return '';
+  return `${nation.flag ? `${nation.flag} ` : ''}${nation.name}`;
+}
+
+/** Flag emoji + ISO 3166-1 alpha-3 (uppercase). */
+export function formatEasyInviteNationAbbrev(code: number): string {
+  const nation = getEasyInviteNationByCode(code);
+  if (!nation) return '';
+  return `${nation.flag ? `${nation.flag} ` : ''}${nation.iso3}`;
+}
 
 /** Placeholder for nation select: five random flag emojis from supported countries. */
 export function bornOrLiveInNationPlaceholder(count = 5): string {

@@ -22,20 +22,20 @@ public:
   // - Claim rewards for the next configured page of adopters
   ACTION claimreward();
 
-  // - Join the queue for a paid invite with personal message and optional nation
-  ACTION ask4invite(name account, name requester, string request, string nation_iso3);
+  // - Join the queue for a paid invite with personal message and nation (ISO 3166-1 alpha-3)
+  ACTION ask4invite(name account, name requester, string request, string nation);
 
   // - Remove stale queue rows for accounts already in adopters (oldest 12 checked)
   ACTION cleanasks();
 
-  // - Remove legacy queue rows with no invite memo (oldest 12 checked)
+  // - Remove incomplete queue rows with no memo, message, or nation (up to 999 per call)
   ACTION cleannomemo();
 
   // - Contract-only removal from invite queue and memo tables
-  ACTION delinvreq(name account);
+  ACTION delrequest(name account);
 
   // - Member updates profile info, nation, and link
-  ACTION updateinfo(name account, string info, string nation_iso3, string link);
+  ACTION updateinfo(name account, string info, string nation, string link);
 
   // - Admin configuration management
   ACTION setconfig(
@@ -190,7 +190,7 @@ private:
 };
   string normalize_enum_name(const string& input);
   uint32_t is_valid_country(uint32_t code, const string country_iso3);
-  void port_memo_to_member(name account, const string& info, uint32_t nation, name payer);
+  void port_memo_to_member(name account, const string& info, uint32_t nation);
 
   // - Calculates position in tetrahedral series
   uint32_t calculate_tetrahedral_position(uint32_t score) {
