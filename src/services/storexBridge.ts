@@ -8,7 +8,7 @@ export const EASY_BRIDGE_CONTRACT = 'bridge.strx';
 export const EASY_MON3Y_CONTRACT = 'mon3y';
 
 /**
- * Fireblocks routes on `api.storex.io` (CORS must allow this app’s origin — whitelisted with Storex).
+ * Fireblocks routes on `api.storex.io` (CORS must allow this app’s origin - whitelisted with Storex).
  * Override with `VITE_STOREX_API_BASE` if you need a different API base URL.
  */
 export function getStorexApiBase(): string {
@@ -49,7 +49,7 @@ function getFirstString(row: Record<string, unknown>, keys: string[]): string | 
 }
 
 /**
- * On-chain `bridge.strx::addresses` uses `chain` (e.g. `"Solana"`). Fireblocks API uses `wallet: "SPL"` — treat both.
+ * On-chain `bridge.strx::addresses` uses `chain` (e.g. `"Solana"`). Fireblocks API uses `wallet: "SPL"` - treat both.
  */
 function matchesEasySolanaDeposit(row: StorexAddressRow): boolean {
   const chain = getFirstString(row, ['chain', 'network', 'wallet', 'wallet_type']);

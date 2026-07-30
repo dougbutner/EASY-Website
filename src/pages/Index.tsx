@@ -1,5 +1,5 @@
 /**
- * Index page — EASY one-page snap-scroll landing and token tools.
+ * Index page - EASY one-page snap-scroll landing and token tools.
  */
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EasyLifeBranchTree } from '@/components/EasyLifeBranchTree';
@@ -152,7 +152,7 @@ type TokenConfig = {
   memoAction?: string;
   /** Shown after `Min.` for reflection-route floor copy (per token). */
   reflectionRouteMin: string;
-  /** Public URL under `/assets/tokens/`. Omit for WON — a random variant is picked once per page load. */
+  /** Public URL under `/assets/tokens/`. Omit for WON - a random variant is picked once per page load. */
   logoPath?: string;
 };
 
@@ -183,7 +183,7 @@ const tokens: TokenConfig[] = [
     symbol: 'EASY',
     contract: 'mon3y',
     title: 'Take it EASY 🍹',
-    tagline: 'The blue-chip flex—Pure-liquid reflections on Alcor.',
+    tagline: 'The blue-chip flex - Pure-liquid reflections on Alcor.',
     summary:
       "The blue-chip flex, EASY delivers reflections and is pure liquid for stables. Gresham's law unfolding, we do more volume on Alcor than USDC.",
     tax: '2% reflection',
@@ -201,7 +201,7 @@ const tokens: TokenConfig[] = [
     symbol: 'WON',
     contract: 'w3won',
     title: 'We WON ⓦ',
-    tagline: 'Rotating default reflection for New Earth—sponsor projects, gift tokens.',
+    tagline: 'Rotating default reflection for New Earth - sponsor projects, gift tokens.',
     summary:
       'WON uses a changing default reflection token to benefit New Earth by giving you tokens from new projects. Currently reflects EASY until we have a project to sponsor.',
     tax: '2.2% reflection + 0.8% team',
@@ -220,7 +220,7 @@ const tokens: TokenConfig[] = [
     symbol: 'GRAMS',
     contract: 'gold.mon3y',
     title: 'Golden GRAMS',
-    tagline: 'Generational gold—inheritance to any account, reflects grams.',
+    tagline: 'Generational gold - inheritance to any account, reflects grams.',
     summary:
       'Generational wealth stored in gold. Grandchildren-approved, with inheritance functionality for any account. Pure liquid for Paxos Gold, GRAMS reflects grams by default.',
     tax: '1.1% reflection + 0.11% team',
@@ -240,7 +240,7 @@ const tokens: TokenConfig[] = [
     symbol: 'MEME',
     contract: 'm3m3',
     title: 'GM Degens 🍦',
-    tagline: 'Fun-first Flex for Alcor farms—unbacked, slow-burn meme ruler.',
+    tagline: 'Fun-first Flex for Alcor farms - unbacked, slow-burn meme ruler.',
     summary: (
       <>
         MEME is totally for fun and used to reward{' '}
@@ -304,6 +304,7 @@ const firstFoldJumpLinks = [
   { id: 'bridge', emoji: '🌉', label: 'Solana XPR Bridge' },
   { id: 'ask4invite', emoji: '🙌', label: 'Request Welcome now', opensAsk4Invite: true as const },
   { id: 'community-chat', emoji: '💬', label: 'Community Chat', href: 'https://t.me/flextokens' },
+  { id: 'read-docs', emoji: '📄', label: 'Read the docs', href: 'https://flex.report' },
 ] as const;
 
 /** Alcor XPR web UI: `https://alcor.exchange/v/xpr/...` (swap, swap-widget, terminal, farm). */
@@ -902,7 +903,7 @@ const Index = () => {
 
   const loadBridgeDepositAddress = async () => {
     if (loading) {
-      toast.error('Wallet is still restoring—wait a moment and try again.');
+      toast.error('Wallet is still restoring - wait a moment and try again.');
       return;
     }
     if (!actor) {
@@ -916,7 +917,7 @@ const Index = () => {
       let address = existing.address;
 
       if (!address) {
-        toast.info('No address yet—creating one.');
+        toast.info('No address yet - creating one.');
         address = await generateEasySolanaDepositAddress(actor);
         if (!address) {
           address = (await fetchEasySolanaDepositAddress(actor)).address;
@@ -951,7 +952,7 @@ const Index = () => {
 
   const withdrawEasyToSolana = async () => {
     if (loading) {
-      toast.error('Wallet is still restoring—wait a moment and try again.');
+      toast.error('Wallet is still restoring - wait a moment and try again.');
       return;
     }
     if (!actor || !activeWallet) {
@@ -1437,7 +1438,7 @@ const Index = () => {
                             ? 'Pending …'
                             : poolRaw
                               ? `Pending ${formatFlexAssetPretty(poolRaw)}`
-                              : 'Pending —'}
+                              : 'Pending - '}
                         </span>
                       </button>
                     );
@@ -1506,7 +1507,7 @@ const Index = () => {
                       ? `Pending … Min. ${selectedToken.reflectionRouteMin}`
                       : selectedReflectionPoolRaw
                         ? `Pending ${formatFlexAssetPretty(selectedReflectionPoolRaw)} Min. ${selectedToken.reflectionRouteMin}`
-                        : `Pending — Min. ${selectedToken.reflectionRouteMin}`}
+                        : `Pending - Min. ${selectedToken.reflectionRouteMin}`}
                   </p>
                 </div>
 
@@ -1688,7 +1689,7 @@ const Index = () => {
                     >
                       {submitting === 'Renounce rewards'
                         ? 'Submitting renounce…'
-                        : `Opt out of tax (${selectedToken.optOutAction}) — renounce rewards forever`}
+                        : `Opt out of tax (${selectedToken.optOutAction}) - renounce rewards forever`}
                     </button>
                   </div>
                 </div>
@@ -2134,7 +2135,7 @@ const Index = () => {
                         ) : actor ? (
                           'Balance unavailable'
                         ) : (
-                          '—'
+                          '-'
                         )}
                       </span>
                     </div>
@@ -2207,7 +2208,7 @@ const Index = () => {
                     greenhorns while growing your own invite score. Or you can Welcome Back any account (even{' '}
                     <code className={codeInlineClass}>reflections</code>) for 200 EASY per tetrahedral level, effectively
                     paying a premium to be their upstream, earning each time they welcome until another Welcome Back
-                    occurs from the original inviter — stacking points from their networks, with half to the networker
+                    occurs from the original inviter - stacking points from their networks, with half to the networker
                     and half to{' '}
                     <code className={codeInlineClass}>inbank.mon3y</code>.
                   </p>
@@ -2306,7 +2307,7 @@ const Index = () => {
                   </p>
                   <p className="mt-3 leading-7 text-yellow-100/65">
                     Every member donated / was welcomed with 100+ EASY to stay permanently in the inbank vault. The
-                    account that paid is credited for what they put in the vault — that banked amount later determines
+                    account that paid is credited for what they put in the vault - that banked amount later determines
                     their share of vault yield. The <code className={codeInlineClass}>invite.mon3y</code> contract
                     distributes inbank reflection yield to every member of the welcome program.
                   </p>
@@ -2386,7 +2387,7 @@ const Index = () => {
                   Welcome loved ones to XPR Network
                 </p>
                 <p className="mt-2 text-sm leading-6 text-yellow-100/60">
-                  Preloaded invite copy below — edit it and the share buttons update live. Ask for their username when
+                  Preloaded invite copy below - edit it and the share buttons update live. Ask for their username when
                   they&apos;re ready for EASY on WebAuth.
                 </p>
                 <EasyLifeShareBar className="mt-4" />
@@ -2444,7 +2445,7 @@ const Index = () => {
                         ? '...'
                         : inviteProgramStatus?.inProgram && inviteProgramStatus.rank
                           ? `#${inviteProgramStatus.rank}`
-                          : '—'
+                          : '-'
                     }
                     label="Current rank"
                   />
@@ -2465,7 +2466,7 @@ const Index = () => {
                     <span className="font-semibold text-yellow-200">Welcome Back</span> captures the purchased
                     account&apos;s downstream (unique accounts, up to 7 levels deep; loops counted once). Cost is{' '}
                     <span className="font-semibold text-yellow-200">200 EASY</span> × their tetrahedral level from their
-                    invite score — not yours.
+                    invite score - not yours.
                   </p>
                 ) : null}
               </div>
@@ -2541,7 +2542,7 @@ const Index = () => {
                                       <span className="line-clamp-2 text-xs leading-snug">
                                         {formatEasyInviteNationName(row.nation) ||
                                           formatEasyInviteNationAbbrev(row.nation) ||
-                                          '—'}
+                                          '-'}
                                       </span>
                                     </td>
                                     <td className="max-w-[8rem] px-3 py-2 text-yellow-100/70">
@@ -2564,7 +2565,7 @@ const Index = () => {
                                     <td className="px-3 py-2 text-yellow-100/55">
                                       {row.requestedAt
                                         ? new Date(row.requestedAt * 1000).toLocaleString()
-                                        : '—'}
+                                        : '-'}
                                     </td>
                                   </tr>
                                 ))}
@@ -2711,7 +2712,7 @@ const Index = () => {
               When we work together, we grow together.
             </p>
             <p className="mt-3 max-w-3xl text-base leading-7 text-yellow-100/65">
-              View your network on <code className={codeInlineClass}>invite.mon3y</code> — who you welcomed and who they
+              View your network on <code className={codeInlineClass}>invite.mon3y</code> - who you welcomed and who they
               welcomed downstream. Click any dot to see their flex chest or send Welcome Back.
             </p>
             <div className="mt-6">
@@ -2774,7 +2775,7 @@ const Index = () => {
               experimental and may lose all value. Described mechanics (rewards, burns, bridges or pegs) are not
               promises of future behavior. Smart contracts and interfaces can contain bugs or change without notice. By
               using the site you accept full responsibility for your wallet actions; volunteers and hosts disclaim all
-              warranties and liability—including for indirect or consequential damages—to the fullest extent permitted by
+              warranties and liability - including for indirect or consequential damages - to the fullest extent permitted by
               law.
             </p>
             <p className="text-yellow-100/40">

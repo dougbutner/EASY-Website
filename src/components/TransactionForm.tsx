@@ -1,5 +1,5 @@
 /**
- * TransactionForm — form to push actions to XPR Network smart contracts.
+ * TransactionForm - form to push actions to XPR Network smart contracts.
  * Abstracts blockchain interaction into simple form fields.
  */
 import { useState } from 'react';

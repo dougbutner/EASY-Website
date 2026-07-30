@@ -1,5 +1,5 @@
 /**
- * WharfKit SessionKit — legacy Anchor sessions only (restore + disconnect).
+ * WharfKit SessionKit - legacy Anchor sessions only (restore + disconnect).
  * New Anchor connections use @proton/web-sdk in walletSessions.
  */
 import type { AnyAction } from '@wharfkit/antelope';

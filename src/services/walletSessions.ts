@@ -1,6 +1,6 @@
 /**
- * XPR Network @proton/web-sdk v5 — official ConnectWallet flow:
- * - `proton` = WebAuth mobile (ProtonLink; app / deep link — not the webauth.com popup)
+ * XPR Network @proton/web-sdk v5 - official ConnectWallet flow:
+ * - `proton` = WebAuth mobile (ProtonLink; app / deep link - not the webauth.com popup)
  * - `webauth` = WebAuth desktop (ProtonWebLink → webauth.com)
  * - `anchor` = Anchor (ProtonLink + ESR)
  *
@@ -317,7 +317,7 @@ export async function transactWithWallet(
 }
 
 /**
- * Sign with Proton Web SDK session and **do not broadcast** — Storex receives the signed
+ * Sign with Proton Web SDK session and **do not broadcast** - Storex receives the signed
  * payload via `/V1/fireblocks/withdraw`.
  */
 export async function signUnbroadcastWebAuthTransaction(

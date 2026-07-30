@@ -134,7 +134,7 @@ export function countHierarchyMembers(root: d3.HierarchyNode<HierarchyDatum>): n
   return n;
 }
 
-/** One paginated `adopters` read — score + banked on each row drive tetrahedral level colors. */
+/** One paginated `adopters` read - score + banked on each row drive tetrahedral level colors. */
 export function buildWelcomeNetworkGraph(adopters: EasyInviteAdopter[]): WelcomeNetworkGraph {
   const { accounts, childrenByInviter } = buildChildrenMap(adopters);
 
@@ -224,7 +224,7 @@ export function countHierarchyLeaves(root: d3.HierarchyNode<HierarchyDatum>): nu
   return leaves;
 }
 
-/** @see https://d3js.org/d3-cluster — leaves spaced evenly on the ring */
+/** @see https://d3js.org/d3-cluster - leaves spaced evenly on the ring */
 export function layoutHierarchyRadial(
   root: d3.HierarchyNode<HierarchyDatum>,
   viewportRadius: number
@@ -247,7 +247,7 @@ export function layoutHierarchyRadial(
   return { root: laidOut, radius };
 }
 
-/** @see https://d3js.org/d3-tree — left-to-right with fixed node spacing */
+/** @see https://d3js.org/d3-tree - left-to-right with fixed node spacing */
 export function layoutHierarchyHorizontal(
   root: d3.HierarchyNode<HierarchyDatum>
 ): { root: d3.HierarchyPointNode<HierarchyDatum>; width: number; height: number } {

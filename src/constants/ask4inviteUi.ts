@@ -5,9 +5,9 @@ export const ASK4INVITE_ACCOUNT_LABEL = 'Account to be welcomed';
 export const ASK4INVITE_MESSAGE_LABEL = 'I want to join the EASY Life because';
 
 export const ASK4INVITE_NOMINATION_NOTE =
-  'You can nominate another XPR account to receive a welcome — enter their account name above. Your connected wallet signs the request as sponsor.';
+  'You can nominate another XPR account to receive a welcome - enter their account name above. Your connected wallet signs the request as sponsor.';
 
-/** Glass panel wrapper for ask4invite forms (no backdrop-blur on mobile — avoids foggy overlay bugs). */
+/** Glass panel wrapper for ask4invite forms (no backdrop-blur on mobile - avoids foggy overlay bugs). */
 export const ask4inviteGlassPanelClass =
   'min-w-0 rounded-2xl border border-yellow-300/20 bg-black/55 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] sm:bg-yellow-200/[0.06] sm:backdrop-blur-xl sm:p-5';
 
@@ -21,7 +21,7 @@ export const ask4inviteGlassDialogClass =
 
 export const ask4inviteDialogOverlayClass = 'z-[90] bg-black/70 backdrop-blur-[2px] sm:backdrop-blur-md';
 
-/** Program status right column — solid on mobile to prevent blur stacking. */
+/** Program status right column - solid on mobile to prevent blur stacking. */
 export const welcomeStatusPanelClass =
   'rounded-2xl border border-yellow-300/20 bg-black/55 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] sm:bg-yellow-200/[0.04] sm:backdrop-blur-xl';
 

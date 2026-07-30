@@ -1,5 +1,5 @@
 /**
- * Header — EASY brand navigation and multi-account wallet menu (XPR proton-web-sdk + legacy Anchor).
+ * Header - EASY brand navigation and multi-account wallet menu (XPR proton-web-sdk + legacy Anchor).
  */
 import { Button } from '@/components/ui/button';
 import {

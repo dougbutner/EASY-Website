@@ -11,7 +11,7 @@ export const TOKEN_LOGO = {
 
 const WON_DIR = '/assets/tokens/won';
 
-/** All WON art variants — one is chosen at random on each full page load. */
+/** All WON art variants - one is chosen at random on each full page load. */
 export const WON_VARIANT_URLS: readonly string[] = [
   `${WON_DIR}/won.png`,
   `${WON_DIR}/won-blue-enlightened-planet.png`,

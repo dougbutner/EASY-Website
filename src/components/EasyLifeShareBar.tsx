@@ -1,5 +1,5 @@
 /**
- * Intent-link share row for the Welcome Program — no clipboard API (avoids permission prompts).
+ * Intent-link share row for the Welcome Program - no clipboard API (avoids permission prompts).
  * Channels chosen for crypto / onboarding reach: Telegram, WhatsApp, X, email, SMS, native share.
  */
 import { type ReactNode, useMemo, useState } from 'react';
@@ -132,7 +132,7 @@ export function EasyLifeShareBar({ className }: { className?: string }) {
   return (
     <div className={cn('space-y-4', className)}>
       <p className="text-xs leading-relaxed text-yellow-100/50">
-        Preloaded invite message — edit below; every share button uses your text as you type.
+        Preloaded invite message - edit below; every share button uses your text as you type.
       </p>
       <textarea
         value={shareText}

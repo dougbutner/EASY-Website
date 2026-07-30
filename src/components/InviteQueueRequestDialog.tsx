@@ -227,7 +227,7 @@ export function InviteQueueRequestDialog({
               <div className="space-y-1">
                 <Label className="text-yellow-100/80">Nation</Label>
                 <p className="whitespace-pre-wrap rounded-md border border-yellow-300/20 bg-black/70 px-3 py-2 text-sm leading-relaxed text-yellow-100/85">
-                  {formatEasyInviteNationName(detail.nation) || '—'}
+                  {formatEasyInviteNationName(detail.nation) || '-'}
                 </p>
               </div>
             ) : null}
@@ -260,7 +260,7 @@ export function InviteQueueRequestDialog({
                     Banked EASY
                   </p>
                   <p className="font-mono text-xs text-yellow-100/85">
-                    {detail.banked ? formatFlexAssetPretty(detail.banked) : '—'}
+                    {detail.banked ? formatFlexAssetPretty(detail.banked) : '-'}
                   </p>
                 </div>
               </div>
@@ -303,7 +303,7 @@ export function InviteQueueRequestDialog({
                 : accountStatus?.account === account
                   ? accountStatus.exists
                     ? accountStatus.registered
-                      ? 'Already in the Welcome Program — Welcome Back captures their downstream.'
+                      ? 'Already in the Welcome Program - Welcome Back captures their downstream.'
                       : 'Account exists and can be welcomed.'
                     : 'Account does not exist on XPR Network yet.'
                   : 'Account check pending…'}

@@ -1,6 +1,6 @@
 /**
  * Embeds Jupiter Plugin (Ultra-backed swap UI).
- * Jupiter Terminal (terminal.jup.ag) is deprecated; use Plugin instead — see https://dev.jup.ag/docs/guides/how-to-embed-a-swap-widget
+ * Jupiter Terminal (terminal.jup.ag) is deprecated; use Plugin instead - see https://dev.jup.ag/docs/guides/how-to-embed-a-swap-widget
  */
 import { useEffect, useState } from 'react';
 import { ExternalLink } from 'lucide-react';

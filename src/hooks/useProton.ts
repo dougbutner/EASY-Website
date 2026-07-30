@@ -1,5 +1,5 @@
 /**
- * useProton — XPR Network @proton/web-sdk (WebAuth app + Web + Anchor) + legacy Wharf Anchor restore.
+ * useProton - XPR Network @proton/web-sdk (WebAuth app + Web + Anchor) + legacy Wharf Anchor restore.
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { LoadedWallet } from '@/services/walletSessions';
