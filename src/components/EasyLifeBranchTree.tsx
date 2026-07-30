@@ -2,8 +2,9 @@
  * Lazy-loaded D3 invite branch for invite.mon3y adopters (downstream by invitedby).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as d3 from 'd3';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -207,10 +208,6 @@ export function EasyLifeBranchTree({
     resetBranch();
     setError(null);
   }, [rootAccount, resetBranch]);
-
-  useEffect(() => {
-    if (viewMode !== 'network') setNetworkFullscreen(false);
-  }, [viewMode]);
 
   useEffect(() => {
     if (!networkFullscreen) return;
@@ -526,9 +523,9 @@ export function EasyLifeBranchTree({
     simulationRef.current?.stop();
     simulationRef.current = null;
 
-    const width = Math.max(container.clientWidth, 640);
+    const width = Math.max(container.clientWidth || (networkFullscreen ? window.innerWidth : 0), 640);
     const height = networkFullscreen
-      ? Math.max(container.clientHeight, 480)
+      ? Math.max(container.clientHeight || window.innerHeight - 140, 480)
       : Math.max(480, Math.min(720, width * 0.72));
 
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
@@ -768,6 +765,134 @@ export function EasyLifeBranchTree({
   }, [networkGraph, networkLayout, viewMode, onSelectNetworkNode, networkFullscreen]);
 
   const networkMaxLevel = networkGraph ? maxNetworkLevel(networkGraph.nodes) : 0;
+  const hasChart =
+    (viewMode === 'network' && Boolean(networkGraph)) ||
+    (viewMode === 'downstream' && Boolean(downstreamTreeData));
+
+  const displayPanel = (
+    <div
+      className={cn(
+        'space-y-3',
+        networkFullscreen &&
+          'fixed inset-0 z-[100] flex flex-col space-y-3 overflow-hidden bg-[#020202] p-4 sm:p-5'
+      )}
+    >
+      {networkFullscreen ? (
+        <div className="flex shrink-0 items-center justify-between gap-3">
+          <p className="text-sm font-black uppercase tracking-[0.24em] text-yellow-300">Welcome network</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setNetworkFullscreen(false)}
+            aria-label="Close full screen"
+            title="Close"
+            className="border-yellow-300/30 bg-black/50 text-yellow-100 hover:bg-yellow-300/20"
+          >
+            <X className="h-4 w-4" aria-hidden />
+            <span>Close</span>
+          </Button>
+        </div>
+      ) : null}
+
+      {viewMode === 'network' && networkGraph ? (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {NETWORK_LAYOUTS.map(({ id, label, hint }) => (
+              <Button
+                key={id}
+                type="button"
+                size="sm"
+                variant={networkLayout === id ? 'default' : 'outline'}
+                title={hint}
+                onClick={() => setNetworkLayout(id)}
+                className={
+                  networkLayout === id
+                    ? 'bg-yellow-300 text-black hover:bg-yellow-200'
+                    : 'border-yellow-300/30 bg-black/50 text-yellow-100 hover:bg-yellow-300/20'
+                }
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs text-yellow-100/55">
+            {WELCOME_LEVEL_COLORS.map((color, i) => (
+              <span key={color} className="inline-flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+                Level {i + 1}
+                {i === WELCOME_LEVEL_COLORS.length - 1 ? '+' : ''}
+              </span>
+            ))}
+          </div>
+          {networkLayout !== 'force' && networkLayout !== 'tangled' ? (
+            <p className="text-xs text-yellow-100/45">
+              Tree layouts show one parent path per account. Welcome Back loops appear fully in Force / Tangled only.
+            </p>
+          ) : null}
+        </>
+      ) : null}
+
+      <div
+        ref={containerRef}
+        className={cn(
+          'relative min-h-[320px] overflow-hidden rounded-[1.5rem] border border-yellow-300/15 bg-black/60',
+          networkFullscreen && 'min-h-0 flex-1 rounded-2xl border-yellow-300/25'
+        )}
+      >
+        {!networkFullscreen ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setNetworkFullscreen(true)}
+            aria-label="Full screen display"
+            title="Full screen"
+            className="absolute right-3 top-3 z-10 border-yellow-300/30 bg-black/70 text-yellow-100 hover:bg-yellow-300/20"
+          >
+            <Maximize2 className="h-4 w-4" aria-hidden />
+            <span>Full screen</span>
+          </Button>
+        ) : null}
+
+        {hasChart ? (
+          <svg
+            ref={svgRef}
+            className={cn('h-full w-full touch-none', networkFullscreen ? 'min-h-0' : 'min-h-[480px]')}
+            role="img"
+            aria-label={viewMode === 'network' ? 'Full welcome network' : 'Invite branch tree'}
+          />
+        ) : (
+          <div
+            className={cn(
+              'flex flex-col items-center justify-center gap-3 px-6 text-center text-sm text-yellow-100/45',
+              networkFullscreen ? 'h-full min-h-0' : 'min-h-[320px]'
+            )}
+          >
+            <p>
+              {loadingNetwork
+                ? 'Loading full welcome network…'
+                : 'Your downstream welcomes appear here after you load a branch.'}
+            </p>
+            <p className="text-xs">
+              <span className="font-semibold text-yellow-200/80">View welcome network</span> loads all adopters - use{' '}
+              <span className="font-semibold text-yellow-200/80">Force graph</span> when Welcome Back creates loops.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void loadWelcomeNetwork()}
+              disabled={loading || loadingNetwork}
+              className="mt-1 border-yellow-300/30 bg-black/50 text-yellow-100 hover:bg-yellow-300/20"
+            >
+              {loadingNetwork ? 'Loading network…' : 'View welcome network'}
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className={cn('space-y-4', className)}>
@@ -830,107 +955,14 @@ export function EasyLifeBranchTree({
         ) : null}
       </div>
 
-      <div
-        className={cn(
-          'space-y-4',
-          networkFullscreen &&
-            'fixed inset-0 z-50 flex flex-col space-y-3 overflow-hidden bg-[#020202] p-4 sm:p-6'
-        )}
-      >
-        {viewMode === 'network' && networkGraph ? (
-          <>
-            <div className="flex flex-wrap gap-2">
-              {NETWORK_LAYOUTS.map(({ id, label, hint }) => (
-                <Button
-                  key={id}
-                  type="button"
-                  size="sm"
-                  variant={networkLayout === id ? 'default' : 'outline'}
-                  title={hint}
-                  onClick={() => setNetworkLayout(id)}
-                  className={
-                    networkLayout === id
-                      ? 'bg-yellow-300 text-black hover:bg-yellow-200'
-                      : 'border-yellow-300/30 bg-black/50 text-yellow-100 hover:bg-yellow-300/20'
-                  }
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap gap-3 text-xs text-yellow-100/55">
-                {WELCOME_LEVEL_COLORS.map((color, i) => (
-                  <span key={color} className="inline-flex items-center gap-1.5">
-                    <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-                    Level {i + 1}
-                    {i === WELCOME_LEVEL_COLORS.length - 1 ? '+' : ''}
-                  </span>
-                ))}
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setNetworkFullscreen((open) => !open)}
-                aria-label={networkFullscreen ? 'Exit full screen' : 'Full screen welcome network'}
-                title={networkFullscreen ? 'Exit full screen' : 'Full screen'}
-                className="border-yellow-300/30 bg-black/50 text-yellow-100 hover:bg-yellow-300/20"
-              >
-                {networkFullscreen ? (
-                  <Minimize2 className="h-4 w-4" aria-hidden />
-                ) : (
-                  <Maximize2 className="h-4 w-4" aria-hidden />
-                )}
-                <span>{networkFullscreen ? 'Exit' : 'Full screen'}</span>
-              </Button>
-            </div>
-            {networkLayout !== 'force' && networkLayout !== 'tangled' ? (
-              <p className="text-xs text-yellow-100/45">
-                Tree layouts show one parent path per account. Welcome Back loops appear fully in Force / Tangled only.
-              </p>
-            ) : null}
-          </>
-        ) : null}
+      {!rootAccount ? (
+        <p className="text-sm text-yellow-100/55">Connect a wallet or type an account to inspect the welcome network.</p>
+      ) : null}
 
-        {!rootAccount ? (
-          <p className="text-sm text-yellow-100/55">Connect a wallet or type an account to inspect the welcome network.</p>
-        ) : null}
+      {error ? <p className="text-sm text-red-300/90">{error}</p> : null}
 
-        {error ? <p className="text-sm text-red-300/90">{error}</p> : null}
-
-        <div
-          ref={containerRef}
-          className={cn(
-            'min-h-[320px] overflow-hidden rounded-[1.5rem] border border-yellow-300/15 bg-black/60',
-            networkFullscreen && 'min-h-0 flex-1 rounded-none border-yellow-300/20'
-          )}
-        >
-          {(viewMode === 'network' && networkGraph) || (viewMode === 'downstream' && downstreamTreeData) ? (
-            <svg
-              ref={svgRef}
-              className={cn(
-                'h-full w-full touch-none',
-                networkFullscreen ? 'min-h-0' : 'min-h-[480px]'
-              )}
-              role="img"
-              aria-label={viewMode === 'network' ? 'Full welcome network' : 'Invite branch tree'}
-            />
-          ) : (
-            <div className="flex min-h-[320px] flex-col items-center justify-center gap-2 px-6 text-center text-sm text-yellow-100/45">
-              <p>
-                {loadingNetwork
-                  ? 'Loading full welcome network…'
-                  : 'Your downstream welcomes appear here after you load a branch.'}
-              </p>
-              <p className="text-xs">
-                <span className="font-semibold text-yellow-200/80">View welcome network</span> loads all adopters - use{' '}
-                <span className="font-semibold text-yellow-200/80">Force graph</span> when Welcome Back creates loops.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+      {networkFullscreen ? createPortal(displayPanel, document.body) : displayPanel}
+      {networkFullscreen ? <div className="min-h-[320px] rounded-[1.5rem] border border-yellow-300/10 bg-black/40" aria-hidden /> : null}
     </div>
   );
 }
